@@ -11,6 +11,7 @@ import CopyButton from "../components/CopyButton";
 import Breadcrumb from "../components/Breadcrumb";
 import Spinner from "../components/Spinner";
 import { logError } from "../lib/activityStore";
+import { t } from "../lib/i18n";
 
 interface VolumeDetailPageProps {
   volumeName: string;
@@ -90,7 +91,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       setFileContentPath(path);
     } catch (e) {
       logError(`Failed to read volume file: ${e}`, `Volume "${props.volumeName}", path "${path}"`);
-      showToast(`Failed to read file: ${e}`, "error");
+      showToast(t("Failed to read file: {e}", { e: e }), "error");
     }
     setFileContentLoading(false);
   };
@@ -113,15 +114,15 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
   const [removing, setRemoving] = createSignal(false);
   const doRemove = async () => {
     if (removing()) return;
-    if (!await confirmDanger("Remove volume", `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger(t("Remove volume"), `Remove volume "${props.volumeName}"? This will permanently delete the volume data.`)) return;
     setRemoving(true);
     try {
       await invoke("remove_volume", { name: props.volumeName });
-      showToast(`Volume "${props.volumeName}" removed`, "success");
+      showToast(t("Volume \"{value1}\" removed", { value1: props.volumeName }), "success");
       props.onBack();
     } catch (err) {
       logError(`Failed to remove volume: ${err}`, `Volume "${props.volumeName}"`);
-      showToast(`Failed to remove volume: ${err}`, "error");
+      showToast(t("Failed to remove volume: {err}", { err: err }), "error");
       setRemoving(false);
     }
   };
@@ -178,9 +179,9 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       a.download = `volume-${props.volumeName}-listing.txt`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast("File listing exported", "success");
+      showToast(t("File listing exported"), "success");
     } catch (e) {
-      showToast(`Failed to export listing: ${e}`, "error");
+      showToast(t("Failed to export listing: {e}", { e: e }), "error");
     }
   };
 
@@ -200,7 +201,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
       <div class="detail-page-header">
         <Show when={volume()} fallback={
           <div class="detail-page-info">
-            <div class="detail-page-name">Loading...</div>
+            <div class="detail-page-name">{t("Loading...")}</div>
           </div>
         }>
           {(v) => (
@@ -217,11 +218,9 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
               </div>
               <div class="detail-page-actions">
                 <button class="btn btn-sm btn-iconed" onClick={() => switchTab("files")}>
-                  <svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z" /></svg>Browse files
-                </button>
-                <button class="btn btn-sm btn-iconed" onClick={exportFileListing} title="Save a list of the volume's files as text">
-                  <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>Export listing
-                </button>
+                  <svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z" /></svg>{t("Browse files")}</button>
+                <button class="btn btn-sm btn-iconed" onClick={exportFileListing} title={t("Save a list of the volume's files as text")}>
+                  <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></svg>{t("Export listing")}</button>
                 <button
                   class="btn btn-sm btn-danger-outline btn-iconed"
                   onClick={doRemove}
@@ -243,14 +242,12 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           class={`detail-tab-item ${activeTab() === "overview" ? "active" : ""}`}
           onClick={() => switchTab("overview")}
         >
-          Overview
-        </button>
+          {t("Overview")}</button>
         <button
           class={`detail-tab-item ${activeTab() === "files" ? "active" : ""}`}
           onClick={() => switchTab("files")}
         >
-          Files
-        </button>
+          {t("Files")}</button>
       </div>
 
       {/* Tab content */}
@@ -281,33 +278,33 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   </div>
                   <div class="cov-ctx-cell">
                     <div class="cov-min">
-                      <div class="cov-lbl">Mount point <span class="cov-lbl-note">inside Docker's VM</span></div>
+                      <div class="cov-lbl">{t("Mount point")} <span class="cov-lbl-note">{t("inside Docker's VM")}</span></div>
                       <div class="cov-row" style={{ gap: "6px" }}>
                         <span class="cov-big mono selectable cov-ellipsis" title={v().mountpoint}>{v().mountpoint}</span>
                         <CopyButton text={v().mountpoint} />
                       </div>
-                      <div class="cov-sub">Driver {v().driver}</div>
+                      <div class="cov-sub">{t("Driver")} {v().driver}</div>
                     </div>
                   </div>
                   <div class="cov-ctx-cell">
                     <div class="cov-min">
-                      <div class="cov-lbl">Size</div>
+                      <div class="cov-lbl">{t("Size")}</div>
                       <div class="cov-big">{size() !== undefined ? formatBytes(size()!) : "–"}</div>
-                      <div class="cov-sub">Created {formatTimestamp(v().created_at)}</div>
+                      <div class="cov-sub">{t("Created")} {formatTimestamp(v().created_at)}</div>
                     </div>
                   </div>
                 </div>
 
                 <div class="vd-body">
                   <div class="cov-row cov-between" style={{ "margin-bottom": "10px" }}>
-                    <span class="cov-lbl">Used by</span>
+                    <span class="cov-lbl">{t("Used by")}</span>
                     <Show when={users().length}><span class="cov-sub">{users().length} {users().length === 1 ? "container" : "containers"}</span></Show>
                   </div>
                   <Show when={users().length > 0} fallback={
                     <div class="vd-empty">
-                      <b>No container mounts this volume.</b>
-                      <span>Its data stays until you remove it. Browse its files to see what it holds.</span>
-                      <button class="btn btn-sm" onClick={() => switchTab("files")}>Browse files</button>
+                      <b>{t("No container mounts this volume.")}</b>
+                      <span>{t("Its data stays until you remove it. Browse its files to see what it holds.")}</span>
+                      <button class="btn btn-sm" onClick={() => switchTab("files")}>{t("Browse files")}</button>
                     </div>
                   }>
                     <div class="vd-users">
@@ -330,7 +327,7 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   </Show>
 
                   <Show when={Object.keys(v().labels).length > 0}>
-                    <div class="cov-lbl" style={{ margin: "18px 0 8px" }}>Labels</div>
+                    <div class="cov-lbl" style={{ margin: "18px 0 8px" }}>{t("Labels")}</div>
                     <div class="nl-labels" style={{ "margin-top": "0" }}>
                       <For each={Object.entries(v().labels)}>{([k, val]) => <span class="nl-label mono selectable">{k}={val}</span>}</For>
                     </div>
@@ -346,11 +343,10 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
           <div class="detail-section">
             <Show when={!fileBrowsingStarted()}>
               <div class="empty" style={{ padding: "40px 0" }}>
-                <p class="empty-title">Browse volume files</p>
-                <p style={{ "margin-bottom": "16px" }}>File browsing uses a temporary Alpine container to read volume contents</p>
+                <p class="empty-title">{t("Browse volume files")}</p>
+                <p style={{ "margin-bottom": "16px" }}>{t("File browsing uses a temporary Alpine container to read volume contents")}</p>
                 <button class="btn btn-primary" onClick={startBrowsing}>
-                  Browse files
-                </button>
+                  {t("Browse files")}</button>
               </div>
             </Show>
             <Show when={fileBrowsingStarted()}>
@@ -359,25 +355,24 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                 <button
                   class="btn btn-sm"
                   onClick={() => { setFileContent(null); setFileContentPath(null); fetchFiles(); }}
-                  title="Root"
+                  title={t("Root")}
                 >
                   /
                 </button>
                 <Show when={currentPath() && !fileContent()}>
-                  <button class="btn btn-sm" onClick={navigateUp} title="Go up">
+                  <button class="btn btn-sm" onClick={navigateUp} title={t("Go up")}>
                     ..
                   </button>
                 </Show>
                 <Show when={fileContent()}>
-                  <button class="btn btn-sm" onClick={() => { setFileContent(null); setFileContentPath(null); }} title="Back to listing">
-                    Back
-                  </button>
+                  <button class="btn btn-sm" onClick={() => { setFileContent(null); setFileContentPath(null); }} title={t("Back to listing")}>
+                    {t("Back")}</button>
                 </Show>
                 <div style={{ display: "flex", "align-items": "center", gap: "2px", color: "#8b949e", "font-size": "13px", "flex-wrap": "wrap" }}>
                   <span
                     style={{ cursor: "pointer", color: currentPath() ? "#58a6ff" : "#e6edf3", padding: "2px 4px" }}
                     onClick={() => fetchFiles()}
-                    title="Root"
+                    title={t("Root")}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
                   </span>
@@ -439,11 +434,11 @@ export default function VolumeDetailPage(props: VolumeDetailPageProps) {
                   <Show when={files().length > 0} fallback={
                     <Show when={fileError()} fallback={
                       <div class="empty" style={{ padding: "20px 0" }}>
-                        <p>Empty directory</p>
+                        <p>{t("Empty directory")}</p>
                       </div>
                     }>
                       <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 0", "font-size": "13px" }}>
-                        <strong>Error:</strong> {fileError()}
+                        <strong>{t("Error:")}</strong> {fileError()}
                       </div>
                     </Show>
                   }>

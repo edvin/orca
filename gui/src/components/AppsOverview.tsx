@@ -14,6 +14,7 @@ import { iconSrc, stackIcon } from "../lib/icons";
 import AppIcon from "./AppIcon";
 import { openFolderDialog } from "../lib/openFolder";
 import { showToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 const svg = (children: JSX.Element) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">{children}</svg>
@@ -168,9 +169,9 @@ export default function AppsOverview(props: {
     setStarting(name);
     try {
       await invoke("compose_up", { name });
-      showToast(`${name} is starting`, "success");
+      showToast(t("{name} is starting", { name: name }), "success");
     } catch (e) {
-      showToast(`Could not start ${name}: ${e}`, "error");
+      showToast(t("Could not start {name}: {e}", { name: name, e: e }), "error");
     }
     setStarting(null);
   };
@@ -184,13 +185,13 @@ export default function AppsOverview(props: {
         onClick={() => props.onNavigate?.(`stack:${s.name}`)} title={`${a.sub ? `${a.sub} · ` : ""}Open ${s.name} in Orca: its containers, logs and settings`}>
         <div class="app-card-head">
           <AppIcon src={iconSrc(a.icon) || stackIcon(s, props.routes)} name={a.title} size={26} />
-          <b title={a.title}>{a.title}</b>
-          <Show when={pinned.has(s.name)}><span class="app-card-pinned" title="Pinned to the top">{ICON.pin()}</span></Show>
+          <b title={a.title}>{t(a.title)}</b>
+          <Show when={pinned.has(s.name)}><span class="app-card-pinned" title={t("Pinned to the top")}>{ICON.pin()}</span></Show>
           <span class={`app-dot ${s.status.toLowerCase()}`} />
           <span class="app-card-count">{running(s)}/{s.services.length}</span>
           {/* Over the top-right corner on hover, so the name keeps the whole row. */}
           <span class="app-card-hover">
-            <span class="app-card-open">Open →</span>
+            <span class="app-card-open">{t("Open →")}</span>
             <button class="app-card-act" classList={{ on: pinned.has(s.name) }}
               title={pinned.has(s.name) ? "Unpin" : "Pin to the top"}
               onClick={(e) => { e.stopPropagation(); pinned.toggle(s.name); }}>{ICON.pin()}</button>
@@ -206,7 +207,7 @@ export default function AppsOverview(props: {
               {starting() === s.name ? "Starting…" : "Start"}
             </button>
           }>
-            <For each={urls().slice(0, 2)} fallback={<span class="app-card-none">No HTTPS route yet</span>}>
+            <For each={urls().slice(0, 2)} fallback={<span class="app-card-none">{t("No HTTPS route yet")}</span>}>
               {(u) => (
                 <button class="app-url" title={`Open ${u.url} in your browser`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
                   {u.url.replace(/^https:\/\//, "")} ↗
@@ -223,14 +224,14 @@ export default function AppsOverview(props: {
   const sharedRow = (sh: NonNullable<Group["shared"]>) => (
     <div class="apps-shared" onClick={() => sh.stack && props.onNavigate?.(`stack:${sh.stack.name}`)}>
       <span class={`app-dot ${sh.running === 0 ? "stopped" : sh.running < sh.total ? "partial" : "running"}`} />
-      <b>Shared services</b>
+      <b>{t("Shared services")}</b>
       <span class="app-card-count">{sh.total ? `${sh.running}/${sh.total} running` : "not running"}</span>
       <span class="apps-shared-links">
         <For each={sh.urls.slice(0, 8)}>
           {(u) => (
             <button class="app-url app-url-icon" title={`Open ${u.url}`} onClick={(e) => { e.stopPropagation(); void openUrl(u.url); }}>
               <Show when={iconSrc(u.icon)}>{(src) => <img src={src()} alt="" />}</Show>
-              {u.title}
+              {t(u.title)}
             </button>
           )}
         </For>
@@ -244,28 +245,28 @@ export default function AppsOverview(props: {
       <Show when={any()} fallback={
         <Show when={!props.hasProjects}>
           <div class="get-started">
-            <div class="get-started-title">Get your first app running</div>
-            <div class="get-started-sub">Orca runs compose projects with real HTTPS URLs, a copy per git worktree, and lets your AI tools drive it.</div>
+            <div class="get-started-title">{t("Get your first app running")}</div>
+            <div class="get-started-sub">{t("Orca runs compose projects with real HTTPS URLs, a copy per git worktree, and lets your AI tools drive it.")}</div>
             <div class="get-started-grid">
               <button class="get-started-card primary" onClick={() => openFolderDialog()}>
                 <span class="get-started-icon">{ICON.folder()}</span>
-                <b>Open a project folder</b>
-                <span>A folder with a compose file. Orca starts it and shows its URLs.</span>
+                <b>{t("Open a project folder")}</b>
+                <span>{t("A folder with a compose file. Orca starts it and shows its URLs.")}</span>
               </button>
               <button class="get-started-card" onClick={() => props.onNavigate?.("projects")}>
                 <span class="get-started-icon">{ICON.branch()}</span>
-                <b>Add a git repository</b>
-                <span>Run every worktree of it side by side, each with its own URLs.</span>
+                <b>{t("Add a git repository")}</b>
+                <span>{t("Run every worktree of it side by side, each with its own URLs.")}</span>
               </button>
               <button class="get-started-card" onClick={() => props.onNavigate?.("workspace")}>
                 <span class="get-started-icon">{svg(<><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20h5v-6h4v6h5V9.5" /></>)}</span>
-                <b>Join your team's workspace</b>
-                <span>One repo sets up shared services, the gateway and every project.</span>
+                <b>{t("Join your team's workspace")}</b>
+                <span>{t("One repo sets up shared services, the gateway and every project.")}</span>
               </button>
               <button class="get-started-card" onClick={() => props.onNavigate?.("templates")}>
                 <span class="get-started-icon">{ICON.grid()}</span>
-                <b>Start from the catalog</b>
-                <span>Postgres, Redis, Keycloak and more, in one click.</span>
+                <b>{t("Start from the catalog")}</b>
+                <span>{t("Postgres, Redis, Keycloak and more, in one click.")}</span>
               </button>
             </div>
           </div>
@@ -273,7 +274,7 @@ export default function AppsOverview(props: {
       }>
         <div class="apps-overview">
           <div class="apps-overview-head">
-            <span>Your apps</span>
+            <span>{t("Your apps")}</span>
             <Show when={hiddenCount() > 0}>
               <button class="apps-hidden-toggle" onClick={() => setShowHidden(!showHidden())}>
                 {showHidden() ? "Leave out hidden apps" : `${hiddenCount()} hidden`}
@@ -286,11 +287,10 @@ export default function AppsOverview(props: {
                 <Show when={g.title && groups().length > 1}>
                   <button class="apps-group-head" onClick={() => folded.toggle(g.key)}>
                     <span class="apps-group-chevron" classList={{ folded: folded.has(g.key) }}>{ICON.chevron()}</span>
-                    <b>{g.title}</b>
+                    <b>{t(g.title)}</b>
                     <Show when={g.sub}><span class="apps-group-sub">{g.sub}</span></Show>
                     <span class="apps-group-count">
-                      {g.apps.filter((a) => a.stack.status === "Running" || a.stack.status === "Partial").length}/{g.apps.length} running
-                    </span>
+                      {g.apps.filter((a) => a.stack.status === "Running" || a.stack.status === "Partial").length}/{g.apps.length} {t("running")}</span>
                   </button>
                 </Show>
                 <Show when={!folded.has(g.key) || groups().length === 1}>
@@ -298,8 +298,7 @@ export default function AppsOverview(props: {
                   <Show when={g.apps.length} fallback={
                     <Show when={g.key === "workspace"}>
                       <button class="apps-group-empty" onClick={() => props.onNavigate?.("workspace")}>
-                        No projects running yet. Set one up on the Workspace page.
-                      </button>
+                        {t("No projects running yet. Set one up on the Workspace page.")}</button>
                     </Show>
                   }>
                     <div class="apps-grid">

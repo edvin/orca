@@ -7,6 +7,7 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { StackProfilesReport } from "../lib/types";
 import ProfileCards from "./ProfileCards";
 import HelpLink from "./HelpLink";
+import { t } from "../lib/i18n";
 
 const muted = { color: "#8b949e", "font-size": "12px" } as const;
 
@@ -56,10 +57,10 @@ export default function StackProfiles(props: {
   return (
     <div class="profiles-panel">
       <div style={{ display: "flex", "align-items": "baseline", gap: "10px", "flex-wrap": "wrap" }}>
-        <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>Profiles</div>
+        <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>{t("Profiles")}</div>
         <div style={{ ...muted, flex: "1", "min-width": "240px" }}>
-          Optional services from the compose file. Orca remembers your pick on this machine.{" "}
-          <HelpLink path="/docs/profiles/">How profiles work</HelpLink>
+          {t("Optional services from the compose file. Orca remembers your pick on this machine.")}{" "}
+          <HelpLink path="/docs/profiles/">{t("How profiles work")}</HelpLink>
         </div>
       </div>
 
@@ -72,11 +73,10 @@ export default function StackProfiles(props: {
             {(m) => (
               <div style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
                 <span>
-                  <b>{m.service}</b> needs <b>{m.needs}</b>
-                  {m.profile ? <>, which is in the <b>{m.profile}</b> profile</> : null}. Compose won't start it without.
-                </span>
+                  <b>{m.service}</b> {t("needs")} <b>{m.needs}</b>
+                  {m.profile ? <>{t(", which is in the")} <b>{m.profile}</b> {t("profile")}</> : null}{t(". Compose won't start it without.")}</span>
                 <Show when={m.profile}>
-                  <button class="btn btn-sm" onClick={() => toggle(m.profile!)}>Turn on {m.profile}</button>
+                  <button class="btn btn-sm" onClick={() => toggle(m.profile!)}>{t("Turn on")} {m.profile}</button>
                 </Show>
               </div>
             )}
@@ -87,16 +87,16 @@ export default function StackProfiles(props: {
       <Show when={changed() || !props.report.remembered}>
         <div class="profiles-bar">
           <div style={{ flex: "1", "min-width": "240px", "font-size": "12.5px", color: "#c9d1d9", display: "flex", "flex-direction": "column", gap: "3px" }}>
-            <Show when={changed()} fallback={<span style={muted}>Running what compose starts by default. Save this set to have Orca start it every time.</span>}>
-              <Show when={props.report.running} fallback={<span>Applies the next time you start the stack.</span>}>
-                <Show when={willStart().length > 0}><span><span style={{ color: "#3fb950" }}>Starts</span> {willStart().join(", ")}</span></Show>
-                <Show when={willStop().length > 0}><span><span style={{ color: "#f0883e" }}>Stops and removes</span> {willStop().join(", ")} <span style={muted}>(volumes are kept)</span></span></Show>
-                <Show when={willStart().length === 0 && willStop().length === 0}><span style={muted}>Nothing to start or stop.</span></Show>
+            <Show when={changed()} fallback={<span style={muted}>{t("Running what compose starts by default. Save this set to have Orca start it every time.")}</span>}>
+              <Show when={props.report.running} fallback={<span>{t("Applies the next time you start the stack.")}</span>}>
+                <Show when={willStart().length > 0}><span><span style={{ color: "#3fb950" }}>{t("Starts")}</span> {willStart().join(", ")}</span></Show>
+                <Show when={willStop().length > 0}><span><span style={{ color: "#f0883e" }}>{t("Stops and removes")}</span> {willStop().join(", ")} <span style={muted}>{t("(volumes are kept)")}</span></span></Show>
+                <Show when={willStart().length === 0 && willStop().length === 0}><span style={muted}>{t("Nothing to start or stop.")}</span></Show>
               </Show>
             </Show>
           </div>
           <Show when={changed()}>
-            <button class="btn btn-sm" disabled={props.busy} onClick={() => setSelected([...props.report.active])}>Reset</button>
+            <button class="btn btn-sm" disabled={props.busy} onClick={() => setSelected([...props.report.active])}>{t("Reset")}</button>
           </Show>
           <Show when={props.report.running && changed()} fallback={
             <button class="btn btn-sm btn-primary" disabled={props.busy || missing().length > 0} onClick={() => props.onSave(selected(), false)}>

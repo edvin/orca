@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { t } from "../lib/i18n";
 
 export interface TopologyNetwork {
   id: string;
@@ -135,14 +136,14 @@ export default function NetworkMap(props: { networks: TopologyNetwork[]; onOpenC
   return (
     <div class="netmap" ref={wrap} classList={{ "netmap-focused": focus() !== null }} onMouseLeave={() => setFocus(null)}>
       <div class="netmap-bar">
-        <span><strong>{used().length}</strong> networks in use</span>
+        <span><strong>{used().length}</strong> {t("networks in use")}</span>
         <span class="netmap-bar-sep" />
-        <span><strong>{containerCount()}</strong> containers</span>
+        <span><strong>{containerCount()}</strong> {t("containers")}</span>
         <Show when={bridging() > 0}>
           <span class="netmap-bar-sep" />
-          <span class="netmap-bar-bridge"><strong>{bridging()}</strong> on more than one network</span>
+          <span class="netmap-bar-bridge"><strong>{bridging()}</strong> {t("on more than one network")}</span>
         </Show>
-        <span class="netmap-hint">Hover a container or a network to see what it connects</span>
+        <span class="netmap-hint">{t("Hover a container or a network to see what it connects")}</span>
       </div>
 
       <div class="netmap-grid">
@@ -165,7 +166,7 @@ export default function NetworkMap(props: { networks: TopologyNetwork[]; onOpenC
                   <div class="netmap-meta">
                     {net.driver || "none"}
                     <Show when={net.subnet}><span> · {net.subnet}</span></Show>
-                    <Show when={net.gateway}><span> · gateway {net.gateway}</span></Show>
+                    <Show when={net.gateway}><span> {t("· gateway")} {net.gateway}</span></Show>
                   </div>
                 </div>
                 <span class="netmap-count" title={`${net.containers.length} containers`}>{net.containers.length}</span>
@@ -205,7 +206,7 @@ export default function NetworkMap(props: { networks: TopologyNetwork[]; onOpenC
 
       <Show when={empty().length > 0}>
         <div class="netmap-empty">
-          <span>No containers on</span>
+          <span>{t("No containers on")}</span>
           <For each={empty()}>{(n) => <span class="netmap-empty-name" title={`${n.driver || "none"}${n.subnet ? ` · ${n.subnet}` : ""}`}>{n.name}</span>}</For>
         </div>
       </Show>

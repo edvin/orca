@@ -27,6 +27,7 @@ import {
   type WorkspaceProject,
   type WorkspaceStatus,
 } from "../lib/workspace";
+import { t } from "../lib/i18n";
 
 const DOCS = "https://orca-desktop.com/docs/workspaces/";
 const openUrl = (url: string) => shellOpen(url).catch(() => window.open(url, "_blank", "noopener,noreferrer"));
@@ -43,7 +44,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
     if (!key || !projects) return;
     clearWorkspaceSetup();
     if (!projects.some((p) => p.key === key)) {
-      showToast(`The workspace has no project called ${key}`, "error");
+      showToast(t("The workspace has no project called {key}", { key: key }), "error");
       return;
     }
     setFocused(key);
@@ -94,13 +95,13 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
       return;
     }
     const result = done.result as { missing_secrets?: string[]; urls?: string[]; warnings?: string[] } | null;
-    for (const w of result?.warnings ?? []) showToast(`${p.key}: ${w}`, "info");
+    for (const w of result?.warnings ?? []) showToast(t("{value1}: {w}", { value1: p.key, w: w }), "info");
     if (result?.missing_secrets?.length) {
       const fresh = ws()?.projects?.find((x) => x.key === p.key) ?? p;
       setSecretsFor(fresh);
       return;
     }
-    showToast(`${p.key} is running`, "success");
+    showToast(t("{value1} is running", { value1: p.key }), "success");
     // Done: the progress gives way to the project's URLs.
     const { [p.key]: _, ...rest } = jobs();
     setJobs(rest);
@@ -129,10 +130,10 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
       const pullFailed = pull?.status === "failed" || (pull?.status === "skipped" && /^Couldn't pull/.test(pull.detail ?? ""));
       if (pullFailed) {
         const why = pull?.detail?.match(/^Couldn't pull \((.*)\)/)?.[1] ?? pull?.detail ?? "unknown error";
-        showToast(`Couldn't pull the workspace: ${why}. Applied it as it is in its folder.`, "info");
+        showToast(t("Couldn't pull the workspace: {why}. Applied it as it is in its folder.", { why: why }), "info");
         return;
       }
-      showToast("Workspace up to date", "success");
+      showToast(t("Workspace up to date"), "success");
       const { [""]: _, ...rest } = jobs();
       setJobs(rest);
     }
@@ -153,39 +154,38 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
   return (
     <div class="workspace-page">
       <div class="page-header">
-        <h1 class="page-title">Workspace</h1>
+        <h1 class="page-title">{t("Workspace")}</h1>
         {/* Leave stays even when the workspace file is broken. */}
         <Show when={ws()?.joined}>
           <div class="page-actions">
             <Show when={!ws()?.error}>
               <Show when={ws()?.path}>{(p) => <FolderActions path={p()} compact />}</Show>
               <button class="btn btn-iconed" onClick={() => void runCheck()} disabled={checking()}
-                title="Checks that this computer is ready for the workspace: ports, domain, certificate, registry logins and access to every repository. It only looks.">
+                title={t("Checks that this computer is ready for the workspace: ports, domain, certificate, registry logins and access to every repository. It only looks.")}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 3 8.3 7 9.5 4-1.2 7-5.1 7-9.5V6Z" /><path d="m9 12 2 2 4-4" /></svg>
                 {checking() ? "Checking…" : "Check this machine"}
               </button>
               <button class="btn btn-iconed" onClick={() => void update()} disabled={jobs()[""]?.status === "running"}
-                title="Pull the workspace and apply it: shared services, routes, gateway">
+                title={t("Pull the workspace and apply it: shared services, routes, gateway")}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v5h-5" /></svg>
                 {jobs()[""]?.status === "running" ? "Updating…" : "Update"}
               </button>
             </Show>
-            <button class="btn btn-iconed" onClick={() => void leave()} title="Leave the workspace: its routes go, your projects and their containers stay">
+            <button class="btn btn-iconed" onClick={() => void leave()} title={t("Leave the workspace: its routes go, your projects and their containers stay")}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="m10 16-4-4 4-4" /><path d="M6 12h10" /></svg>
-              Leave
-            </button>
+              {t("Leave")}</button>
           </div>
         </Show>
       </div>
 
-      <Show when={ws()} fallback={<div class="ws-muted">Loading…</div>}>
+      <Show when={ws()} fallback={<div class="ws-muted">{t("Loading…")}</div>}>
         {(w) => (
           <Show when={w().joined} fallback={<JoinPanel onJoined={() => void refetch()} />}>
             <Show when={!w().error} fallback={
               <div class="ws-alert bad">
-                <b>The workspace file has a problem</b>
+                <b>{t("The workspace file has a problem")}</b>
                 <span>{w().error}</span>
-                <span class="ws-muted">Fix it in {w().path}, then click Update.</span>
+                <span class="ws-muted">{t("Fix it in")} {w().path}{t(", then click Update.")}</span>
                 <button
                   class="btn btn-sm"
                   disabled={jobs()[""]?.status === "running"}
@@ -204,12 +204,12 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                 {(u) => (
                   <div class="ws-updated">
                     <div class="ws-updated-head">
-                      <b>Workspace updated {ago(u().at)}</b>
-                      <button class="ws-updated-close" title="Dismiss" onClick={() => dismissUpdate(u().at)}>×</button>
+                      <b>{t("Workspace updated")} {ago(u().at)}</b>
+                      <button class="ws-updated-close" title={t("Dismiss")} onClick={() => dismissUpdate(u().at)}>×</button>
                     </div>
                     <ul>
                       <For each={u().commits}>{(c) => <li>{c}</li>}</For>
-                      <Show when={u().more > 0}><li class="ws-muted">and {u().more} more</li></Show>
+                      <Show when={u().more > 0}><li class="ws-muted">{t("and")} {u().more} {t("more")}</li></Show>
                     </ul>
                   </div>
                 )}
@@ -219,18 +219,18 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                   <Show when={w().logo}>{(src) => <img class="ws-logo" src={src()} alt="" />}</Show>
                   <div>
                     <div class="ws-name">{w().name}</div>
-                    <Show when={w().description}><div class="ws-desc">{w().description}</div></Show>
+                    <Show when={w().description}><div class="ws-desc">{t(w().description)}</div></Show>
                   </div>
                 </div>
                 <div class="ws-facts">
-                  <span class="ws-chip" title="The gateway serves every project under this domain">*.{w().domain}</span>
+                  <span class="ws-chip" title={t("The gateway serves every project under this domain")}>*.{w().domain}</span>
                   <span class="ws-chip" title={w().certificate === "workspace" ? "The certificate comes with the workspace" : "Orca's own certificate authority signs the names"}>
                     {w().certificate === "workspace" ? "Team certificate" : "Orca CA"}
                     <Show when={certExpiry(w().certificate_expires)}>{(e) => <span class={`cert-expiry ${e().level}`}> · {e().text}</span>}</Show>
                   </span>
-                  <Show when={w().network}><span class="ws-chip" title="Docker network every project joins">{w().network}</span></Show>
+                  <Show when={w().network}><span class="ws-chip" title={t("Docker network every project joins")}>{w().network}</span></Show>
                   <Show when={w().shared}>
-                    {(s) => <span class={`ws-chip ${s().running === s().total ? "ok" : "warn"}`}>{s().running}/{s().total} shared services</span>}
+                    {(s) => <span class={`ws-chip ${s().running === s().total ? "ok" : "warn"}`}>{s().running}/{s().total} {t("shared services")}</span>}
                   </Show>
                 </div>
               </div>
@@ -240,13 +240,10 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
               <Show when={checking()}>
                 <div class="ws-check">
                   <div class="ws-check-head">
-                    <b>Checking this machine…</b>
+                    <b>{t("Checking this machine…")}</b>
                   </div>
                   <div class="ws-muted ws-check-what">
-                    Whether the gateway can use ports 80 and 443, {w().domain ? <>*.{w().domain} </> : "the domain "}reaches this computer,
-                    the certificate is trusted, you're logged in to the image registries, and you can reach each project's git repository.
-                    It only looks: nothing is changed.
-                  </div>
+                    {t("Whether the gateway can use ports 80 and 443,")} {w().domain ? <>*.{w().domain} </> : "the domain "}{t("reaches this computer, the certificate is trusted, you're logged in to the image registries, and you can reach each project's git repository. It only looks: nothing is changed.")}</div>
                 </div>
               </Show>
               <Show when={!checking() && checks()}>
@@ -254,14 +251,14 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
                   <div class="ws-check">
                     <div class="ws-check-head">
                       <b>{list().some((c) => c.status === "bad") ? "This machine needs a few things" : list().some((c) => c.status === "warn") ? "Almost there" : "This machine is ready"}</b>
-                      <button class="ws-updated-close" title="Close" onClick={() => setChecks(null)}>×</button>
+                      <button class="ws-updated-close" title={t("Close")} onClick={() => setChecks(null)}>×</button>
                     </div>
                     <For each={list().filter((c) => c.status !== "skip")}>
                       {(c) => (
                         <div class={`ws-check-row ${c.status}`}>
                           <span class="ws-check-mark">{c.status === "ok" ? "✓" : c.status === "warn" ? "!" : "✕"}</span>
                           <div>
-                            <div><b>{c.label}</b> <span class="ws-muted">{c.detail}</span></div>
+                            <div><b>{t(c.label)}</b> <span class="ws-muted">{c.detail}</span></div>
                             <Show when={c.fix}>{(f) => <div class="ws-check-fix">{f()}</div>}</Show>
                           </div>
                         </div>
@@ -274,22 +271,22 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
               <For each={(w().registries ?? []).filter((r) => !r.logged_in)}>
                 {(r) => (
                   <div class="ws-alert">
-                    <b>Log in to {r.host}</b>
-                    <span>Projects pull their images from it. Run this once in a terminal:</span>
+                    <b>{t("Log in to")} {r.host}</b>
+                    <span>{t("Projects pull their images from it. Run this once in a terminal:")}</span>
                     <code class="mono">docker login {r.host}</code>
-                    <button class="btn btn-sm" onClick={() => navigator.clipboard.writeText(`docker login ${r.host}`).then(() => showToast("Copied", "success"), () => {})}>Copy</button>
+                    <button class="btn btn-sm" onClick={() => navigator.clipboard.writeText(`docker login ${r.host}`).then(() => showToast(t("Copied"), "success"), () => {})}>{t("Copy")}</button>
                   </div>
                 )}
               </For>
 
               <Show when={(w().shared_urls ?? []).length > 0}>
-                <div class="ws-section-title">Shared services</div>
+                <div class="ws-section-title">{t("Shared services")}</div>
                 <div class="ws-shared">
                   <For each={w().shared_urls}>
                     {(u) => (
                       <button class="app-url app-url-icon" title={u.url} onClick={() => void openUrl(u.url)}>
                         <Show when={iconSrc(u.icon)}>{(src) => <img src={src()} alt="" />}</Show>
-                        {u.title} ↗
+                        {t(u.title)} ↗
                       </button>
                     )}
                   </For>
@@ -297,8 +294,7 @@ export default function WorkspacePage(props: { onNavigate?: (target: string) => 
               </Show>
 
               <div class="ws-section-title">
-                Projects
-                <span class="ws-muted"> · or ask your AI tool: “spin up {w().projects?.[0]?.key ?? "a project"}”</span>
+                {t("Projects")}<span class="ws-muted"> {t("· or ask your AI tool: “spin up")} {w().projects?.[0]?.key ?? "a project"}”</span>
               </div>
               <div class="ws-grid">
                 <For each={[...(w().projects ?? [])].sort((a, b) => (a.group ?? a.key).localeCompare(b.group ?? b.key) || a.key.localeCompare(b.key))}>
@@ -371,11 +367,11 @@ function ProjectCard(props: {
             </button>
           </span>
         </Show>
-        <Show when={p().group}>{(g) => <span class="ws-card-group" title="Its group in the workspace file">{g()}</span>}</Show>
+        <Show when={p().group}>{(g) => <span class="ws-card-group" title={t("Its group in the workspace file")}>{g()}</span>}</Show>
         <span class={`app-dot ${p().running ? "running" : ""}`} />
         <span class={`ws-state ${state()}`}>{p().running ? "Running" : p().cloned ? "Cloned" : "Not cloned"}</span>
       </div>
-      <Show when={p().description}><div class="ws-card-desc">{p().description}</div></Show>
+      <Show when={p().description}><div class="ws-card-desc">{t(p().description)}</div></Show>
       <div class="ws-card-repo mono" title={p().repo}>{p().repo}</div>
       <For each={props.databases ?? []}>
         {(r) => (
@@ -396,8 +392,7 @@ function ProjectCard(props: {
 
       <Show when={p().cloned && missing().length > 0 && !busy()}>
         <button class="ws-secrets-warn" onClick={props.onSecrets}>
-          🔑 {missing().length} secret{missing().length === 1 ? "" : "s"} to fill in
-        </button>
+          🔑 {missing().length} {t("secret")}{missing().length === 1 ? "" : "s"} {t("to fill in")}</button>
       </Show>
 
       <Show when={props.job}>
@@ -419,7 +414,7 @@ function ProjectCard(props: {
         </Show>
         <Show when={p().cloned}><FolderActions path={p().dir} compact /></Show>
         <Show when={p().cloned && p().setup && !busy()}>
-          <button class="btn-link ws-rerun" title={p().setup ?? ""} onClick={() => props.onSetup(true)}>Run setup again</button>
+          <button class="btn-link ws-rerun" title={p().setup ?? ""} onClick={() => props.onSetup(true)}>{t("Run setup again")}</button>
         </Show>
       </div>
     </div>
@@ -470,7 +465,7 @@ function JoinPanel(props: { onJoined: () => void }) {
       const started = await workspaceApi.join(repo().trim(), folder().trim() || undefined);
       const done = await followJob(started.id, setJob);
       if (done.status === "succeeded") {
-        showToast("Workspace joined", "success");
+        showToast(t("Workspace joined"), "success");
         props.onJoined();
       }
     } catch (e) {
@@ -482,49 +477,46 @@ function JoinPanel(props: { onJoined: () => void }) {
   return (
     <div class="ws-join">
       <div class="ws-join-icon">⌂</div>
-      <div class="ws-join-title">Join your team's workspace</div>
+      <div class="ws-join-title">{t("Join your team's workspace")}</div>
       <p class="ws-join-sub">
-        One repo sets up your whole local environment: the shared services, the gateway on your team's domain with its certificate,
-        and every project, ready to set up with one click or by asking your AI tool.
-      </p>
+        {t("One repo sets up your whole local environment: the shared services, the gateway on your team's domain with its certificate, and every project, ready to set up with one click or by asking your AI tool.")}</p>
       <form class="ws-join-form" onSubmit={(e) => { e.preventDefault(); if (repo().trim() && !running()) void join(); }}>
-        <input class="form-input mono" placeholder="git@git.example.com:team/dev-workspace.git" value={repo()}
+        <input class="form-input mono" placeholder={t("git@git.example.com:team/dev-workspace.git")} value={repo()}
           onInput={(e) => setRepo(e.currentTarget.value)} disabled={running()} />
         <button class="btn btn-primary" type="submit" disabled={!repo().trim() || running()}>{running() ? "Joining…" : "Join"}</button>
       </form>
       <Show when={!repo().trim() && !running()}>
         <p class="ws-muted ws-join-where">
-          Already have it checked out?{" "}
-          <button class="btn-link" onClick={() => void pickFolder()}>Choose its folder…</button>
+          {t("Already have it checked out?")}{" "}
+          <button class="btn-link" onClick={() => void pickFolder()}>{t("Choose its folder…")}</button>
         </p>
       </Show>
       <Show when={showFolder()} fallback={
         <Show when={suggested() || !isFolder()} fallback={
           <p class="ws-muted ws-join-where">
-            Joins your copy in <span class="mono">{tildify(repo().trim())}</span> where it is; projects go beside it.
-          </p>
+            {t("Joins your copy in")} <span class="mono">{tildify(repo().trim())}</span> {t("where it is; projects go beside it.")}</p>
         }>
         <Show when={suggested()} fallback={
           <Show when={repo().trim()}>
-            <button class="ai-connect-more" onClick={changeFolder}>Keep your code somewhere other than ~/code?</button>
+            <button class="ai-connect-more" onClick={changeFolder}>{t("Keep your code somewhere other than ~/code?")}</button>
           </Show>
         }>
           {(s) => (
             <p class="ws-muted ws-join-where">
               <Show when={s().existing} fallback={
-                <>Clones to <span class="mono">{s().folder}</span>{s().checkouts > 0 ? `, next to your ${s().checkouts} checkouts` : ""}; projects go to <span class="mono">{s().parent}</span> too. </>
+                <>{t("Clones to")} <span class="mono">{s().folder}</span>{s().checkouts > 0 ? `, next to your ${s().checkouts} checkouts` : ""}{t("; projects go to")} <span class="mono">{s().parent}</span> {t("too.")} </>
               }>
-                Uses your copy in <span class="mono">{s().folder}</span>; projects go beside it in <span class="mono">{s().parent}</span>.{" "}
+                {t("Uses your copy in")} <span class="mono">{s().folder}</span>{t("; projects go beside it in")} <span class="mono">{s().parent}</span>.{" "}
               </Show>
-              <button class="btn-link" onClick={changeFolder} disabled={running()}>Change</button>
+              <button class="btn-link" onClick={changeFolder} disabled={running()}>{t("Change")}</button>
             </p>
           )}
         </Show>
         </Show>
       }>
-        <input class="form-input mono ws-join-folder" placeholder="~/projects/dev-workspace" value={folder()}
+        <input class="form-input mono ws-join-folder" placeholder={t("~/projects/dev-workspace")} value={folder()}
           onInput={(e) => setFolder(e.currentTarget.value)} disabled={running()} />
-        <p class="ws-muted ws-join-hint">Projects are cloned next to the workspace, so put it where your checkouts are: ones already there are used as they are.</p>
+        <p class="ws-muted ws-join-hint">{t("Projects are cloned next to the workspace, so put it where your checkouts are: ones already there are used as they are.")}</p>
       </Show>
       <Show when={job()}>
         {(j) => (
@@ -535,9 +527,8 @@ function JoinPanel(props: { onJoined: () => void }) {
         )}
       </Show>
       <p class="ws-muted ws-join-foot">
-        Setting one up for your team?{" "}
-        <button class="btn-link" onClick={() => void openUrl(DOCS)}>Create a workspace</button>: it's one YAML file in a repo.
-      </p>
+        {t("Setting one up for your team?")}{" "}
+        <button class="btn-link" onClick={() => void openUrl(DOCS)}>{t("Create a workspace")}</button>{t(": it's one YAML file in a repo.")}</p>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import FolderActions from "../components/FolderActions";
 import { stackUrls } from "../lib/stackUrls";
 import { openContainerOn } from "../lib/containerTab";
 import type { GatewayRoute } from "../lib/types";
+import { t } from "../lib/i18n";
 
 interface StackDetailPageProps {
   stackName: string;
@@ -80,7 +81,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
       setProfiles(r);
       if (r.output && !r.output.success) {
         logError(`Could not apply profiles to ${props.stackName}`, r.output.stderr);
-        showToast(`Could not apply: ${r.output.stderr.trim().split("\n").pop()}`, "error");
+        showToast(t("Could not apply: {value1}", { value1: r.output.stderr.trim().split("\n").pop() }), "error");
       } else {
         showToast(apply ? "Profiles applied" : "Saved. Orca starts this set from now on.", "success");
       }
@@ -126,19 +127,19 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           showToast(`${action.replace(/_/g, " ")} failed: ${output.stderr || "Unknown error"}`, "error");
         } else if (failedHooks.length > 0) {
           for (const h of failedHooks) logError(`Stack hook failed: ${h.hook}`, h.output);
-          showToast(`Stack is up, but ${failedHooks.length} hook(s) from orca.yaml failed. See Activity for the output.`, "error");
+          showToast(t("Stack is up, but {value1} hook(s) from orca.yaml failed. See Activity for the output.", { value1: failedHooks.length }), "error");
         } else {
-          showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
+          showToast(t("{value1} succeeded", { value1: action.replace(/_/g, " ") }), "success");
         }
       } else {
         ok = true;
-        showToast(`${action.replace(/_/g, " ")} succeeded`, "success");
+        showToast(t("{value1} succeeded", { value1: action.replace(/_/g, " ") }), "success");
       }
       setTimeout(fetchStack, 500);
       if (action === "compose_up" || action === "compose_down") setTimeout(() => void refetchProfiles(), 600);
     } catch (err) {
       logError(`Failed to ${action.replace(/_/g, " ")} stack: ${err}`, `Stack "${props.stackName}"`);
-      showToast(`${action} failed: ${err}`, "error");
+      showToast(t("{action} failed: {err}", { action: action, err: err }), "error");
     }
     setActionInProgress(false);
     return ok;
@@ -149,11 +150,11 @@ export default function StackDetailPage(props: StackDetailPageProps) {
     try {
       await invoke("stop_container", { id: containerId });
       await invoke("start_container", { id: containerId });
-      showToast("Service restarted", "success");
+      showToast(t("Service restarted"), "success");
       await fetchStack();
     } catch (err) {
       logError(`Failed to restart service: ${err}`, `Stack "${props.stackName}", service ${containerId}`);
-      showToast(`Restart failed: ${err}`, "error");
+      showToast(t("Restart failed: {err}", { err: err }), "error");
     }
     setServiceLoading(null);
   };
@@ -206,7 +207,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           when={stack()}
           fallback={
             <div class="detail-page-info">
-              <div class="detail-page-name">Loading...</div>
+              <div class="detail-page-name">{t("Loading...")}</div>
             </div>
           }
         >
@@ -220,19 +221,17 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                     <button
                       class="btn btn-sm"
                       style={{ padding: "1px 6px", "font-size": "11px", "line-height": "1.4" }}
-                      title="Copy stack directory path"
+                      title={t("Copy stack directory path")}
                       onClick={() => {
                         navigator.clipboard.writeText(s().working_dir!);
-                        showToast("Path copied to clipboard", "success");
+                        showToast(t("Path copied to clipboard"), "success");
                       }}
                     >
-                      Copy path
-                    </button>
+                      {t("Copy path")}</button>
                   </Show>
                   <Show when={s().services.length > 0}>
                     <span style={{ "margin-left": "12px", color: "#484f58" }}>
-                      {runningCount()}/{s().services.length} services running
-                    </span>
+                      {runningCount()}/{s().services.length} {t("services running")}</span>
                   </Show>
                 </div>
                 <div class="stack-quick">
@@ -249,7 +248,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
               </div>
 
               <span class={`state-badge ${statusConfig(s().status).class}`}>
-                {statusConfig(s().status).label}
+                {t(statusConfig(s().status).label)}
               </span>
 
               <div class={`detail-page-actions action-icons ${actionInProgress() ? "loading" : ""}`}>
@@ -269,38 +268,34 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                       doStackAction("compose_down");
                     }}
                     disabled={actionInProgress()}
-                    title="Stop stack"
+                    title={t("Stop stack")}
                   >
-                    &#9632; Stop
-                  </button>
+                    {t("■ Stop")}</button>
                 </Show>
                 <Show when={s().status !== "Running"}>
                   <button
                     class="btn btn-sm btn-primary"
                     onClick={() => doStackAction("compose_up")}
                     disabled={actionInProgress()}
-                    title="Start stack"
+                    title={t("Start stack")}
                   >
-                    &#9654; Start
-                  </button>
+                    {t("▶ Start")}</button>
                 </Show>
                 <Show when={s().working_dir}>
                   <button
                     class="btn btn-sm"
                     onClick={() => doStackAction("restart_stack")}
                     disabled={actionInProgress()}
-                    title="Restart stack"
+                    title={t("Restart stack")}
                   >
-                    &#10227; Restart
-                  </button>
+                    {t("⟳ Restart")}</button>
                   <button
                     class="btn btn-sm"
                     onClick={() => doStackAction("compose_pull")}
                     disabled={actionInProgress()}
-                    title="Pull images"
+                    title={t("Pull images")}
                   >
-                    &#8595; Pull
-                  </button>
+                    {t("↓ Pull")}</button>
                 </Show>
               </div>
             </>
@@ -314,14 +309,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
           class={`detail-tab-item ${activeTab() === "services" ? "active" : ""}`}
           onClick={() => setActiveTab("services")}
         >
-          Services
-        </button>
+          {t("Services")}</button>
         <button
           class={`detail-tab-item ${activeTab() === "logs" ? "active" : ""}`}
           onClick={() => setActiveTab("logs")}
         >
-          Logs
-        </button>
+          {t("Logs")}</button>
         <button
           class={`detail-tab-item ${activeTab() === "compose" ? "active" : ""}`}
           onClick={() => {
@@ -329,14 +322,12 @@ export default function StackDetailPage(props: StackDetailPageProps) {
             if (!composeContent()) fetchComposeFile();
           }}
         >
-          Compose file
-        </button>
+          {t("Compose file")}</button>
         <button
           class={`detail-tab-item ${activeTab() === "orca" ? "active" : ""}`}
           onClick={() => setActiveTab("orca")}
         >
-          orca.yaml
-        </button>
+          {t("orca.yaml")}</button>
       </div>
 
       {/* Tab content */}
@@ -357,18 +348,17 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   padding: "24px 0",
                 }}
               >
-                No services found in this stack.
-              </div>
+                {t("No services found in this stack.")}</div>
             }
           >
             <table class="table">
               <thead>
                 <tr>
-                  <th>Service</th>
-                  <th>Image</th>
-                  <th>State</th>
-                  <th>Ports</th>
-                  <th style={{ "text-align": "right" }}>Actions</th>
+                  <th>{t("Service")}</th>
+                  <th>{t("Image")}</th>
+                  <th>{t("State")}</th>
+                  <th>{t("Ports")}</th>
+                  <th style={{ "text-align": "right" }}>{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -417,13 +407,11 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                               })
                             }
                           >
-                            Logs
-                          </button>
+                            {t("Logs")}</button>
                           <Show when={svc.state === "Running"}>
                             <button class="btn btn-sm" title={`Open a shell in ${svc.container_name}`}
                               onClick={() => { openContainerOn(svc.container_id, "terminal"); props.onNavigate?.(`container:${svc.container_id},stack:${props.stackName}`); }}>
-                              Shell
-                            </button>
+                              {t("Shell")}</button>
                           </Show>
                           <Show when={serviceLoading() === svc.container_id}>
                             <Spinner />
@@ -441,8 +429,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                               }}
                               disabled={serviceLoading() === svc.container_id}
                             >
-                              Start
-                            </button>
+                              {t("Start")}</button>
                           </Show>
                           <Show when={svc.state === "Running"}>
                             <button
@@ -457,15 +444,13 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                               }}
                               disabled={serviceLoading() === svc.container_id}
                             >
-                              Stop
-                            </button>
+                              {t("Stop")}</button>
                             <button
                               class="btn btn-sm"
                               onClick={() => restartService(svc.container_id)}
                               disabled={serviceLoading() === svc.container_id}
                             >
-                              Restart
-                            </button>
+                              {t("Restart")}</button>
                           </Show>
                         </div>
                       </td>
@@ -482,17 +467,17 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                       <td class="mono">{svc.image ?? "built"}</td>
                       <Show when={svc.profiles.some((p) => profiles()!.active.includes(p))} fallback={
                         <>
-                          <td><span class="state-badge state-stopped" title="Its profile is off">Off</span></td>
+                          <td><span class="state-badge state-stopped" title={t("Its profile is off")}>{t("Off")}</span></td>
                           <td />
                           <td style={{ "text-align": "right", opacity: 1 }}>
                             <button class="btn btn-sm" disabled={profilesBusy()}
                               onClick={() => void saveProfiles([...profiles()!.active, svc.profiles[0]], profiles()!.running)}>
-                              Turn on {svc.profiles[0]}
+                              {t("Turn on")} {svc.profiles[0]}
                             </button>
                           </td>
                         </>
                       }>
-                        <td><span class="state-badge state-created" title="Its profile is on; it starts with the stack">Not started</span></td>
+                        <td><span class="state-badge state-created" title={t("Its profile is on; it starts with the stack")}>{t("Not started")}</span></td>
                         <td />
                         <td />
                       </Show>
@@ -503,8 +488,8 @@ export default function StackDetailPage(props: StackDetailPageProps) {
             </table>
             <Show when={!profiles.loading && !hasProfiles() && stack()!.services.length > 2}>
               <div style={{ color: "#6e7681", "font-size": "12px", "margin-top": "12px" }}>
-                Not every service needed every time? Put optional ones behind a compose profile and switch them on here.{" "}
-                <HelpLink path="/docs/profiles/#make-a-service-optional">How</HelpLink>
+                {t("Not every service needed every time? Put optional ones behind a compose profile and switch them on here.")}{" "}
+                <HelpLink path="/docs/profiles/#make-a-service-optional">{t("How")}</HelpLink>
               </div>
             </Show>
           </Show>
@@ -528,15 +513,13 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   "white-space": "nowrap",
                 }}
               >
-                Service:
-              </span>
+                {t("Service:")}</span>
               <div class="filter-pills">
                 <button
                   class={`filter-pill ${logServiceFilter() === null ? "active" : ""}`}
                   onClick={() => setLogServiceFilter(null)}
                 >
-                  Select a service
-                </button>
+                  {t("Select a service")}</button>
                 <For each={stack()?.services ?? []}>
                   {(svc) => (
                     <button
@@ -560,8 +543,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   padding: "24px 0",
                 }}
               >
-                Select a service above to view its logs.
-              </div>
+                {t("Select a service above to view its logs.")}</div>
             }
           >
             {(containerId) => {
@@ -611,8 +593,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   padding: "24px 0",
                 }}
               >
-                No compose file path available for this stack.
-              </div>
+                {t("No compose file path available for this stack.")}</div>
             </Show>
 
             <Show when={savedSinceLastRestart()}>
@@ -630,7 +611,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   "margin-bottom": "8px",
                 }}
               >
-                <span>The compose file changed. Apply it to recreate the services whose definition changed; the others keep running.</span>
+                <span>{t("The compose file changed. Apply it to recreate the services whose definition changed; the others keep running.")}</span>
                 <button
                   class="btn btn-sm btn-primary"
                   onClick={() => {
@@ -638,8 +619,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   }}
                   disabled={actionInProgress()}
                 >
-                  Apply changes
-                </button>
+                  {t("Apply changes")}</button>
               </div>
             </Show>
 
@@ -653,7 +633,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   onSave={async (content: string) => {
                     const path = composePath();
                     if (!path) {
-                      showToast("No compose file path available", "error");
+                      showToast(t("No compose file path available"), "error");
                       return;
                     }
                     try {
@@ -661,9 +641,9 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                       setComposeFiles((fs) => fs.map((f) => (f.path === path ? { ...f, text: content } : f)));
                       setComposeContent(content);
                       setSavedSinceLastRestart(true);
-                      showToast("Compose file saved", "success");
+                      showToast(t("Compose file saved"), "success");
                     } catch (e) {
-                      showToast(`Failed to save: ${e}`, "error");
+                      showToast(t("Failed to save: {e}", { e: e }), "error");
                       throw e;
                     }
                   }}
@@ -679,7 +659,7 @@ export default function StackDetailPage(props: StackDetailPageProps) {
                   "margin-top": "8px",
                 }}
               >
-                Could not read the compose file{composeError() ? `: ${composeError()}` : "."}
+                {t("Could not read the compose file")}{composeError() ? `: ${composeError()}` : "."}
               </div>
             </Show>
           </div>

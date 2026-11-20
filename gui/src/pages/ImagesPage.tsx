@@ -17,6 +17,7 @@ import SortableHeader from "../components/SortableHeader";
 import { useSort } from "../lib/useSort";
 import { escapeHtml, safeHref } from "../lib/sanitize";
 import { logError } from "../lib/activityStore";
+import { t } from "../lib/i18n";
 
 interface ImagesPageProps {
   autoOpenPull?: boolean;
@@ -215,7 +216,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     if (q) {
       list = list.filter(
         (img) =>
-          img.repo_tags.some((t) => t.toLowerCase().includes(q)) ||
+          img.repo_tags.some((tx) => tx.toLowerCase().includes(q)) ||
           img.id.includes(q)
       );
     }
@@ -247,11 +248,11 @@ export default function ImagesPage(props: ImagesPageProps) {
 
   const removeImage = async (id: string, tag: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove image", `Remove image '${tag}'?`)) return;
+    if (!await confirmDanger(t("Remove image"), `Remove image '${tag}'?`)) return;
     setDeletingImageId(id);
     try {
       await invoke("remove_image", { id });
-      showToast("Image removed", "success");
+      showToast(t("Image removed"), "success");
       await refresh();
     } catch (err) {
       // Parse Docker error JSON if present
@@ -264,7 +265,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       if (msg.includes("conflict:")) msg = msg.split("conflict:").pop()!.trim();
       else if (msg.includes("is being used")) msg = msg.substring(msg.indexOf("image"));
       logError(`Failed to remove image: ${msg}`, `Image "${tag}"`);
-      showToast(`Cannot remove '${tag}': ${msg}`, "error");
+      showToast(t("Cannot remove '{tag}': {msg}", { tag: tag, msg: msg }), "error");
     } finally {
       setDeletingImageId(null);
     }
@@ -275,7 +276,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     if (ids.length === 0) return;
     const count = ids.length;
     if (!await confirmDanger(
-      "Delete images",
+      t("Delete images"),
       `Delete ${count} selected image${count !== 1 ? "s" : ""}? This cannot be undone.`
     )) return;
 
@@ -327,7 +328,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       await refresh();
     } catch (e) {
       logError(`Failed to prune images: ${e}`);
-      showToast(`Prune failed: ${e}`, "error");
+      showToast(t("Prune failed: {e}", { e: e }), "error");
     } finally {
       setPruning(false);
       setShowPruneConfirm(false);
@@ -372,7 +373,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           setAuthPassword("");
           setShowPull(false);
           setPulling(false);
-          showToast(`Pulled ${ref_}`, "success");
+          showToast(t("Pulled {ref_}", { ref_: ref_ }), "success");
           refresh();
           try { pullUnlisten?.(); } catch {}
           pullUnlisten = null;
@@ -381,7 +382,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           setPullLayers({});
           setPulling(false);
           logError(`Failed to pull image: ${data.error}`, `Image "${ref_}"`);
-          showToast(`Pull failed: ${data.error}`, "error");
+          showToast(t("Pull failed: {value1}", { value1: data.error }), "error");
           try { pullUnlisten?.(); } catch {}
           pullUnlisten = null;
         }
@@ -397,7 +398,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setPullStatus("");
       setPullLayers({});
       logError(`Failed to pull image: ${e}`, `Image "${ref_}"`);
-      showToast(`Pull failed: ${e}`, "error");
+      showToast(t("Pull failed: {e}", { e: e }), "error");
       setPulling(false);
     }
     try { pullUnlisten?.(); } catch {}
@@ -478,9 +479,9 @@ export default function ImagesPage(props: ImagesPageProps) {
       if (controller.signal.aborted) {
         // Unmount / user cancellation — don't surface a toast.
       } else if (hadError) {
-        showToast("Build failed -- check build output", "error");
+        showToast(t("Build failed -- check build output"), "error");
       } else {
-        showToast("Image built successfully", "success");
+        showToast(t("Image built successfully"), "success");
         await refresh();
       }
     } catch (e: any) {
@@ -490,7 +491,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         // no-op
       } else {
         logError(`Failed to build image: ${e}`, `Context "${path}"${buildTag().trim() ? `, tag "${buildTag().trim()}"` : ""}`);
-        showToast(`Build error: ${e}`, "error");
+        showToast(t("Build error: {e}", { e: e }), "error");
         setBuildOutput(prev => [...prev, `Error: ${e}`]);
       }
     }
@@ -504,13 +505,13 @@ export default function ImagesPage(props: ImagesPageProps) {
     setImporting(true);
     try {
       await invoke("import_image", { path });
-      showToast("Image imported successfully", "success");
+      showToast(t("Image imported successfully"), "success");
       setShowImport(false);
       setImportPath("");
       await refresh();
     } catch (e) {
       logError(`Failed to import image: ${e}`, `Path "${path}"`);
-      showToast(`Import failed: ${e}`, "error");
+      showToast(t("Import failed: {e}", { e: e }), "error");
     } finally {
       setImporting(false);
     }
@@ -522,12 +523,12 @@ export default function ImagesPage(props: ImagesPageProps) {
     setSavingTar(true);
     try {
       await invoke("save_image_tar", { id: saveTarImageId(), path });
-      showToast(`Image saved to ${path}`, "success");
+      showToast(t("Image saved to {path}", { path: path }), "success");
       setShowSaveTar(false);
       setSaveTarPath("");
     } catch (e) {
       logError(`Failed to save image: ${e}`, `Path "${path}"`);
-      showToast(`Save failed: ${e}`, "error");
+      showToast(t("Save failed: {e}", { e: e }), "error");
     } finally {
       setSavingTar(false);
     }
@@ -651,7 +652,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setFileContentPath(filePath);
     } catch (e) {
       logError(`Failed to read image file: ${e}`, `Image ${imageId}, path "${fullPath}"`);
-      showToast(`Failed to read file: ${e}`, "error");
+      showToast(t("Failed to read file: {e}", { e: e }), "error");
     }
   };
 
@@ -664,7 +665,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       setScanResult(result);
     } catch (e) {
       logError(`Failed to scan image: ${e}`, `Image ${imageId}`);
-      showToast(`Scan failed: ${e}`, "error");
+      showToast(t("Scan failed: {e}", { e: e }), "error");
       setScanImageId(null);
     } finally {
       setScanning(false);
@@ -802,7 +803,7 @@ export default function ImagesPage(props: ImagesPageProps) {
       URL.revokeObjectURL(url);
       setReportPath(fileName);
     } catch (e) {
-      showToast(`Failed to export report: ${e}`, "error");
+      showToast(t("Failed to export report: {e}", { e: e }), "error");
     }
   };
 
@@ -835,8 +836,7 @@ export default function ImagesPage(props: ImagesPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">
-          Images
-          <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
+          {t("Images")}<span style={{ "font-size": "13px", color: "#8b949e", "font-weight": "400", "margin-left": "8px" }}>
             {filtered().length} &middot; {formatBytes(totalSize())}
           </span>
           <LastUpdated timestamp={lastUpdated()} />
@@ -845,25 +845,20 @@ export default function ImagesPage(props: ImagesPageProps) {
           <input
             class="search-input"
             type="text"
-            placeholder="Filter images..."
+            placeholder={t("Filter images...")}
             value={search()}
             onInput={(e) => setSearch(e.currentTarget.value)}
           />
           <button class="btn" onClick={() => setShowPull(true)}>
-            Pull
-          </button>
+            {t("Pull")}</button>
           <button class="btn" onClick={() => setShowBuild(!showBuild())}>
-            Build
-          </button>
+            {t("Build")}</button>
           <button class="btn" onClick={() => setShowImport(!showImport())}>
-            Import
-          </button>
+            {t("Import")}</button>
           <button class="btn" onClick={() => setShowPruneConfirm(true)}>
-            Prune
-          </button>
+            {t("Prune")}</button>
           <button class="btn" onClick={refresh}>
-            Refresh
-          </button>
+            {t("Refresh")}</button>
         </div>
       </div>
 
@@ -871,35 +866,35 @@ export default function ImagesPage(props: ImagesPageProps) {
       {/* Build panel */}
       <Show when={showBuild()}>
         <div class="card" style={{ "margin-bottom": "16px" }}>
-          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Build image</div>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>{t("Build image")}</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
-              <label class="form-label">Context path (directory with Dockerfile)</label>
+              <label class="form-label">{t("Context path (directory with Dockerfile)")}</label>
               <input
                 class="form-input"
                 type="text"
-                placeholder="/path/to/project"
+                placeholder={t("/path/to/project")}
                 value={buildPath()}
                 onInput={(e) => setBuildPath(e.currentTarget.value)}
               />
             </div>
             <div class="form-row">
               <div class="form-group" style={{ flex: 1 }}>
-                <label class="form-label">Dockerfile (optional)</label>
+                <label class="form-label">{t("Dockerfile (optional)")}</label>
                 <input
                   class="form-input"
                   type="text"
-                  placeholder="Dockerfile"
+                  placeholder={t("Dockerfile")}
                   value={buildDockerfile()}
                   onInput={(e) => setBuildDockerfile(e.currentTarget.value)}
                 />
               </div>
               <div class="form-group" style={{ flex: 1 }}>
-                <label class="form-label">Tag (optional)</label>
+                <label class="form-label">{t("Tag (optional)")}</label>
                 <input
                   class="form-input"
                   type="text"
-                  placeholder="myapp:latest"
+                  placeholder={t("myapp:latest")}
                   value={buildTag()}
                   onInput={(e) => setBuildTag(e.currentTarget.value)}
                 />
@@ -911,8 +906,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 style={{ "font-size": "12px", padding: "4px 10px" }}
                 onClick={() => setBuildArgs([...buildArgs(), { key: "", value: "" }])}
               >
-                + Add build arg
-              </button>
+                {t("+ Add build arg")}</button>
               <Show when={buildArgs().length > 0}>
                 <div style={{ "margin-top": "8px" }}>
                   <Index each={buildArgs()}>
@@ -920,7 +914,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <div style={{ display: "flex", gap: "8px", "margin-bottom": "6px" }}>
                         <input
                           class="form-input"
-                          placeholder="ARG_NAME"
+                          placeholder={t("ARG_NAME")}
                           value={arg().key}
                           onInput={(e) => {
                             const next = [...buildArgs()];
@@ -931,7 +925,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                         />
                         <input
                           class="form-input"
-                          placeholder="value"
+                          placeholder={t("value")}
                           value={arg().value}
                           onInput={(e) => {
                             const next = [...buildArgs()];
@@ -962,12 +956,10 @@ export default function ImagesPage(props: ImagesPageProps) {
                 {building() ? (<><Spinner size={12} />{" Building..."}</>) : "Build"}
               </button>
               <button class="btn" onClick={() => setShowBuild(false)}>
-                Cancel
-              </button>
+                {t("Cancel")}</button>
               <Show when={buildOutput().length > 0 && !building()}>
                 <button class="btn" onClick={() => setBuildOutput([])}>
-                  Clear output
-                </button>
+                  {t("Clear output")}</button>
               </Show>
             </div>
             <Show when={buildOutput().length > 0 || building()}>
@@ -1000,8 +992,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 </For>
                 <Show when={building()}>
                   <div style={{ color: "#8b949e", "margin-top": "4px" }}>
-                    <Spinner size={10} />{" "}Building...
-                  </div>
+                    <Spinner size={10} />{" "}{t("Building...")}</div>
                 </Show>
               </div>
             </Show>
@@ -1012,14 +1003,14 @@ export default function ImagesPage(props: ImagesPageProps) {
       {/* Import panel */}
       <Show when={showImport()}>
         <div class="card" style={{ "margin-bottom": "16px" }}>
-          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>Import Image from Tar</div>
+          <div style={{ "font-weight": "600", "margin-bottom": "12px" }}>{t("Import Image from Tar")}</div>
           <div style={{ display: "flex", "flex-direction": "column", gap: "10px" }}>
             <div class="form-group">
-              <label class="form-label">Path to tar file</label>
+              <label class="form-label">{t("Path to tar file")}</label>
               <input
                 class="form-input"
                 type="text"
-                placeholder="/path/to/image.tar"
+                placeholder={t("/path/to/image.tar")}
                 value={importPath()}
                 onInput={(e) => setImportPath(e.currentTarget.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") doImport(); }}
@@ -1034,8 +1025,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 {importing() ? (<><Spinner size={12} />{" Importing..."}</>) : "Import"}
               </button>
               <button class="btn" onClick={() => setShowImport(false)}>
-                Cancel
-              </button>
+                {t("Cancel")}</button>
             </div>
           </div>
         </div>
@@ -1063,12 +1053,11 @@ export default function ImagesPage(props: ImagesPageProps) {
         }}>
           <Show when={batchDeleteProgress()} fallback={
             <span style={{ "font-size": "13px", color: "#e6edf3" }}>
-              {selected().size} image{selected().size !== 1 ? "s" : ""} selected
-            </span>
+              {selected().size} {t("image")}{selected().size !== 1 ? "s" : ""} {t("selected")}</span>
           }>
             {(p) => (
               <span style={{ "font-size": "13px", color: "#e6edf3", display: "inline-flex", "align-items": "center", gap: "8px" }}>
-                <Spinner size={12} /> Deleting images... ({p().done}/{p().total})
+                <Spinner size={12} /> {t("Deleting images... (")}{p().done}/{p().total})
               </span>
             )}
           </Show>
@@ -1077,8 +1066,7 @@ export default function ImagesPage(props: ImagesPageProps) {
             {batchDeleteProgress() ? "Deleting..." : "Delete selected"}
           </button>
           <button class="btn btn-sm" onClick={() => setSelected(new Set())} disabled={!!batchDeleteProgress()}>
-            Clear
-          </button>
+            {t("Clear")}</button>
         </div>
       </Show>
 
@@ -1090,7 +1078,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           <Show when={lastUpdated() !== null || !!listError()} fallback={
             <table class="table">
               <thead>
-                <tr><th /><th>Repository / Tag</th><th>ID</th><th>Size</th><th>Created</th><th>Actions</th></tr>
+                <tr><th /><th>{t("Repository / Tag")}</th><th>{t("ID")}</th><th>{t("Size")}</th><th>{t("Created")}</th><th>{t("Actions")}</th></tr>
               </thead>
               <tbody>
                 <SkeletonRow columns={6} />
@@ -1102,10 +1090,10 @@ export default function ImagesPage(props: ImagesPageProps) {
             </table>
           }>
             <div class="empty">
-              <p class="empty-title">No images found</p>
-              <p>Pull an image from Docker Hub using the Pull button above.</p>
+              <p class="empty-title">{t("No images found")}</p>
+              <p>{t("Pull an image from Docker Hub using the Pull button above.")}</p>
               <div class="empty-actions">
-                <button class="btn btn-primary" onClick={() => setShowPull(true)}>Pull image</button>
+                <button class="btn btn-primary" onClick={() => setShowPull(true)}>{t("Pull image")}</button>
               </div>
             </div>
           </Show>
@@ -1122,11 +1110,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                   style={{ cursor: "pointer", "accent-color": "#58a6ff" }}
                 />
               </th>
-              <SortableHeader label="Repository / Tag" field="tag" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th>ID</th>
-              <SortableHeader label="Size" field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} style={{ "min-width": "90px" }} />
-              <SortableHeader label="Created" field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
-              <th style={{ "text-align": "right" }}>Actions</th>
+              <SortableHeader label={t("Repository / Tag")} field="tag" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <th>{t("ID")}</th>
+              <SortableHeader label={t("Size")} field="size" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} style={{ "min-width": "90px" }} />
+              <SortableHeader label={t("Created")} field="created" currentSort={sortField()} currentDirection={sortDir()} onSort={toggleSort} />
+              <th style={{ "text-align": "right" }}>{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1153,14 +1141,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                       <Show
                         when={img.repo_tags.length > 0}
                         fallback={
-                          <span style={{ color: "#8b949e" }}>&lt;untagged&gt;</span>
+                          <span style={{ color: "#8b949e" }}>{t("<untagged>")}</span>
                         }
                       >
                         <For each={img.repo_tags}>
                           {(tag) => (
                             <div class="mono" style={{ "line-height": "1.6", display: "flex", "align-items": "center", gap: "4px" }}>
                               {tag}
-                              <CopyButton text={tag} label="Copy image tag" />
+                              <CopyButton text={tag} label={t("Copy image tag")} />
                             </div>
                           )}
                         </For>
@@ -1169,7 +1157,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                     <td class="mono" style={{ color: "#8b949e" }}>
                       <span style={{ display: "inline-flex", "align-items": "center", gap: "4px" }}>
                         {shortId(img.id)}
-                        <CopyButton text={img.id} label="Copy image ID" />
+                        <CopyButton text={img.id} label={t("Copy image ID")} />
                       </span>
                     </td>
                     <td>{formatBytes(img.size_bytes)}</td>
@@ -1181,13 +1169,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                         <Show when={img.repo_tags.length > 0}>
                           <button
                             class="action-icon action-icon-start"
-                            title="Run container from this image"
+                            title={t("Run container from this image")}
                             onClick={(e) => { e.stopPropagation(); setRunImage(img.repo_tags[0]); }}
                           >▶</button>
                         </Show>
                         <button
                           class="action-icon"
-                          title="Tag image"
+                          title={t("Tag image")}
                           onClick={(e) => {
                             e.stopPropagation();
                             setTagSource(img.id);
@@ -1199,7 +1187,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                         ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></button>
                         <button
                           class="action-icon"
-                          title="Save to tar"
+                          title={t("Save to tar")}
                           onClick={(e) => {
                             e.stopPropagation();
                             setSaveTarImageId(img.id);
@@ -1213,13 +1201,13 @@ export default function ImagesPage(props: ImagesPageProps) {
                           fallback={
                             <button
                               class="action-icon action-icon-delete"
-                              title="Remove image"
+                              title={t("Remove image")}
                               disabled={deletingImageId() !== null}
                               onClick={(e) => removeImage(img.id, img.repo_tags[0] || img.id, e)}
                             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
                           }
                         >
-                          <span title="Removing image..." style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "28px", height: "28px" }}>
+                          <span title={t("Removing image...")} style={{ display: "inline-flex", "align-items": "center", "justify-content": "center", width: "28px", height: "28px" }}>
                             <Spinner size={12} />
                           </span>
                         </Show>
@@ -1233,7 +1221,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                           <Show
                             when={inspectData()}
                             fallback={
-                              <span style={{ color: "#8b949e" }}><Spinner size={12} />{" "}Loading image details...</span>
+                              <span style={{ color: "#8b949e" }}><Spinner size={12} />{" "}{t("Loading image details...")}</span>
                             }
                           >
                             {(data) => {
@@ -1254,48 +1242,46 @@ export default function ImagesPage(props: ImagesPageProps) {
                               const layerCount = imageHistoryData().length;
                               return (<>
                                 <div class="card-grid">
-                                  <div class="card-label">Image ID</div>
+                                  <div class="card-label">{t("Image ID")}</div>
                                   <div class="card-value mono" style={{ "font-size": "11px", display: "flex", "align-items": "center", gap: "6px" }}>
                                     {imageId}
-                                    <CopyButton text={imageId} label="Copy image ID" />
+                                    <CopyButton text={imageId} label={t("Copy image ID")} />
                                   </div>
 
-                                  <div class="card-label">Tags</div>
+                                  <div class="card-label">{t("Tags")}</div>
                                   <div class="card-value">
-                                    <Show when={tags.length > 0} fallback={<span style={{ color: "#8b949e" }}>None</span>}>
+                                    <Show when={tags.length > 0} fallback={<span style={{ color: "#8b949e" }}>{t("None")}</span>}>
                                       <For each={tags}>
                                         {(tag: string) => (
                                           <div class="mono" style={{ "line-height": "1.6", display: "flex", "align-items": "center", gap: "4px" }}>
                                             {tag}
-                                            <CopyButton text={tag} label="Copy tag" />
+                                            <CopyButton text={tag} label={t("Copy tag")} />
                                           </div>
                                         )}
                                       </For>
                                     </Show>
                                   </div>
 
-                                  <div class="card-label">Size</div>
+                                  <div class="card-label">{t("Size")}</div>
                                   <div class="card-value">{formatBytes(typeof size === "number" ? size : 0)}</div>
 
-                                  <div class="card-label">Created</div>
+                                  <div class="card-label">{t("Created")}</div>
                                   <div class="card-value">{formatTimestamp(created)}</div>
 
-                                  <div class="card-label">Layers</div>
+                                  <div class="card-label">{t("Layers")}</div>
                                   <div class="card-value" style={{ display: "flex", "align-items": "center", gap: "8px", "flex-wrap": "wrap" }}>
-                                    <span>{layerCount} layer{layerCount !== 1 ? "s" : ""}</span>
+                                    <span>{layerCount} {t("layer")}{layerCount !== 1 ? "s" : ""}</span>
                                     <Show when={layerCount > 0}>
                                       <button class="btn btn-sm" style={{ "font-size": "11px", padding: "1px 8px" }}
                                         onClick={(e) => { e.stopPropagation(); setLayersDialogImage(img); }}>
-                                        View layers
-                                      </button>
+                                        {t("View layers")}</button>
                                     </Show>
                                   </div>
                                 </div>
 
                                 <div style={{ "margin-top": "12px", display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
                                   <button class="btn btn-sm" onClick={(e) => { e.stopPropagation(); openFileBrowser(img.id); }}>
-                                    Browse files
-                                  </button>
+                                    {t("Browse files")}</button>
                                   <button
                                     class="btn btn-sm"
                                     disabled={scanning() && scanImageId() === img.id}
@@ -1339,8 +1325,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                           "font-size": "13px",
                                           "font-weight": "500",
                                         }}>
-                                          No vulnerabilities found
-                                        </div>
+                                          {t("No vulnerabilities found")}</div>
                                       }
                                     >
                                       <div style={{
@@ -1350,8 +1335,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                         "flex-wrap": "wrap",
                                       }}>
                                         <span style={{ "font-size": "13px", color: "#8b949e", "margin-right": "4px" }}>
-                                          {scanResult()!.total} vulnerabilities:
-                                        </span>
+                                          {scanResult()!.total} {t("vulnerabilities:")}</span>
                                         <Show when={scanResult()!.critical > 0}>
                                           <span style={{
                                             background: "#da3633",
@@ -1361,8 +1345,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                             "font-size": "12px",
                                             "font-weight": "600",
                                           }}>
-                                            {scanResult()!.critical} Critical
-                                          </span>
+                                            {scanResult()!.critical} {t("Critical")}</span>
                                         </Show>
                                         <Show when={scanResult()!.high > 0}>
                                           <span style={{
@@ -1373,8 +1356,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                             "font-size": "12px",
                                             "font-weight": "600",
                                           }}>
-                                            {scanResult()!.high} High
-                                          </span>
+                                            {scanResult()!.high} {t("High")}</span>
                                         </Show>
                                         <Show when={scanResult()!.medium > 0}>
                                           <span style={{
@@ -1385,8 +1367,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                             "font-size": "12px",
                                             "font-weight": "600",
                                           }}>
-                                            {scanResult()!.medium} Medium
-                                          </span>
+                                            {scanResult()!.medium} {t("Medium")}</span>
                                         </Show>
                                         <Show when={scanResult()!.low > 0}>
                                           <span style={{
@@ -1397,16 +1378,14 @@ export default function ImagesPage(props: ImagesPageProps) {
                                             "font-size": "12px",
                                             "font-weight": "600",
                                           }}>
-                                            {scanResult()!.low} Low
-                                          </span>
+                                            {scanResult()!.low} {t("Low")}</span>
                                         </Show>
                                         <button
                                           class="btn btn-sm"
                                           style={{ "margin-left": "auto" }}
                                           onClick={(e) => { e.stopPropagation(); exportScanReport(img, scanResult()!); }}
                                         >
-                                          Export report
-                                        </button>
+                                          {t("Export report")}</button>
                                       </div>
                                       {/* Detailed vulnerability report */}
                                       <Show when={scanResult()!.results}>
@@ -1420,12 +1399,12 @@ export default function ImagesPage(props: ImagesPageProps) {
                                           <table class="table" style={{ "font-size": "12px", margin: 0 }}>
                                             <thead>
                                               <tr>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Severity</th>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>CVE</th>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Package</th>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Installed</th>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Fixed in</th>
-                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>Title</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>{t("Severity")}</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>{t("CVE")}</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>{t("Package")}</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>{t("Installed")}</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>{t("Fixed in")}</th>
+                                                <th style={{ position: "sticky", top: 0, background: "#161b22", "z-index": 1 }}>{t("Title")}</th>
                                               </tr>
                                             </thead>
                                             <tbody>
@@ -1521,36 +1500,36 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "500px" }}>
             <div class="modal-header">
-              <span class="modal-title">Tag image</span>
+              <span class="modal-title">{t("Tag image")}</span>
               <button class="modal-close" onClick={() => { if (!tagging()) setShowTagDialog(false); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
               <div style={{ "margin-bottom": "14px", color: "#8b949e", "font-size": "13px" }}>
-                Source: <span class="mono" style={{ color: "#e6edf3" }}>{tagSourceLabel()}</span>
+                {t("Source:")} <span class="mono" style={{ color: "#e6edf3" }}>{tagSourceLabel()}</span>
               </div>
               <div class="form-group" style={{ "margin-bottom": "12px" }}>
-                <label class="form-label">Repository</label>
+                <label class="form-label">{t("Repository")}</label>
                 <input
                   class="form-input"
                   type="text"
-                  placeholder="myregistry.com/myapp"
+                  placeholder={t("myregistry.com/myapp")}
                   value={tagRepo()}
                   onInput={(e) => setTagRepo(e.currentTarget.value)}
                 />
               </div>
               <div class="form-group">
-                <label class="form-label">Tag</label>
+                <label class="form-label">{t("Tag")}</label>
                 <input
                   class="form-input"
                   type="text"
-                  placeholder="latest"
+                  placeholder={t("latest")}
                   value={tagValue()}
                   onInput={(e) => setTagValue(e.currentTarget.value)}
                 />
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => { if (!tagging()) setShowTagDialog(false); }} disabled={tagging()}>Cancel</button>
+              <button class="btn" onClick={() => { if (!tagging()) setShowTagDialog(false); }} disabled={tagging()}>{t("Cancel")}</button>
               <button
                 class="btn btn-primary"
                 disabled={tagging() || !tagRepo().trim()}
@@ -1562,11 +1541,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                       repo: tagRepo().trim(),
                       tag: tagValue().trim() || "latest",
                     });
-                    showToast("Image tagged successfully", "success");
+                    showToast(t("Image tagged successfully"), "success");
                     setShowTagDialog(false);
                     await refresh();
                   } catch (e) {
-                    showToast(`Tag failed: ${e}`, "error");
+                    showToast(t("Tag failed: {e}", { e: e }), "error");
                   }
                   setTagging(false);
                 }}
@@ -1586,19 +1565,19 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "500px" }}>
             <div class="modal-header">
-              <span class="modal-title">Save Image to Tar</span>
+              <span class="modal-title">{t("Save Image to Tar")}</span>
               <button class="modal-close" onClick={() => { if (!savingTar()) setShowSaveTar(false); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
               <div style={{ "margin-bottom": "14px", color: "#8b949e", "font-size": "13px" }}>
-                Image: <span class="mono" style={{ color: "#e6edf3" }}>{saveTarImageLabel()}</span>
+                {t("Image:")} <span class="mono" style={{ color: "#e6edf3" }}>{saveTarImageLabel()}</span>
               </div>
               <div class="form-group">
-                <label class="form-label">Save path</label>
+                <label class="form-label">{t("Save path")}</label>
                 <input
                   class="form-input"
                   type="text"
-                  placeholder="/path/to/image.tar"
+                  placeholder={t("/path/to/image.tar")}
                   value={saveTarPath()}
                   onInput={(e) => setSaveTarPath(e.currentTarget.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") doSaveTar(); }}
@@ -1607,7 +1586,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               </div>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => { if (!savingTar()) setShowSaveTar(false); }} disabled={savingTar()}>Cancel</button>
+              <button class="btn" onClick={() => { if (!savingTar()) setShowSaveTar(false); }} disabled={savingTar()}>{t("Cancel")}</button>
               <button
                 class="btn btn-primary"
                 disabled={savingTar() || !saveTarPath().trim()}
@@ -1628,21 +1607,17 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ "max-width": "460px" }}>
             <div class="modal-header">
-              <span class="modal-title">Prune unused images</span>
+              <span class="modal-title">{t("Prune unused images")}</span>
               <button class="modal-close" onClick={() => setShowPruneConfirm(false)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
               <p style={{ "margin-bottom": "12px", "line-height": "1.5" }}>
-                This will remove all images that are not referenced by any container.
-              </p>
+                {t("This will remove all images that are not referenced by any container.")}</p>
               <p style={{ "font-size": "13px", color: "#8b949e", "line-height": "1.5" }}>
-                Dangling images (untagged layers) and unused images will be deleted.
-                Images in use by running or stopped containers are kept.
-                This action cannot be undone.
-              </p>
+                {t("Dangling images (untagged layers) and unused images will be deleted. Images in use by running or stopped containers are kept. This action cannot be undone.")}</p>
             </div>
             <div class="modal-footer">
-              <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>Cancel</button>
+              <button class="btn" onClick={() => setShowPruneConfirm(false)} disabled={pruning()}>{t("Cancel")}</button>
               <button class="btn" style={{ background: "#da3633", color: "#fff" }} onClick={pruneUnused} disabled={pruning()}>
                 {pruning() ? "Pruning..." : "Prune images"}
               </button>
@@ -1659,7 +1634,7 @@ export default function ImagesPage(props: ImagesPageProps) {
         >
           <div class="modal-dialog" style={{ width: "700px", "max-width": "90vw", "min-height": "500px", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
-              <span class="modal-title">Pull image</span>
+              <span class="modal-title">{t("Pull image")}</span>
               <button class="modal-close" onClick={() => { setShowPull(false); setPulling(false); setPullStatus(""); }}>{"\u00d7"}</button>
             </div>
             <div class="modal-body">
@@ -1678,7 +1653,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                     ref={(el) => { pullInputRef = el; setTimeout(() => el.focus(), 50); }}
                     class="pull-input"
                     type="text"
-                    placeholder="Search Docker Hub and pull an image (e.g. nginx, postgres:16)"
+                    placeholder={t("Search Docker Hub and pull an image (e.g. nginx, postgres:16)")}
                     value={pullRef()}
                     onInput={(e) => onPullInput(e.currentTarget.value)}
                     onKeyDown={handlePullKeyDown}
@@ -1694,13 +1669,11 @@ export default function ImagesPage(props: ImagesPageProps) {
                   }}>
                     <Show when={searching()}>
                       <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
-                        <Spinner size={12} />{" "}Searching...
-                      </div>
+                        <Spinner size={12} />{" "}{t("Searching...")}</div>
                     </Show>
                     <Show when={!searching() && searchResults().length === 0 && pullRef().trim().length >= 2}>
                       <div style={{ padding: "10px 14px", color: "#8b949e", "font-size": "13px" }}>
-                        No results found
-                      </div>
+                        {t("No results found")}</div>
                     </Show>
                     <For each={searchResults()}>
                       {(result, i) => (
@@ -1724,8 +1697,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                                   background: "#1f6feb", color: "#fff", "font-size": "10px",
                                   padding: "1px 6px", "border-radius": "4px", "font-weight": "600",
                                 }}>
-                                  OFFICIAL
-                                </span>
+                                  {t("OFFICIAL")}</span>
                               </Show>
                             </div>
                             <div style={{
@@ -1737,9 +1709,9 @@ export default function ImagesPage(props: ImagesPageProps) {
                           </div>
                           <div style={{ display: "flex", gap: "12px", "font-size": "11px", color: "#8b949e", "flex-shrink": 0 }}>
                             <Show when={result.pulls}>
-                              <span title="Downloads">{result.pulls}</span>
+                              <span title={t("Downloads")}>{result.pulls}</span>
                             </Show>
-                            <span title="Stars">{"\u2605"} {result.stars}</span>
+                            <span title={t("Stars")}>{"\u2605"} {result.stars}</span>
                           </div>
                         </div>
                       )}
@@ -1752,7 +1724,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <input
                     class="form-input"
                     type="text"
-                    placeholder="Username"
+                    placeholder={t("Username")}
                     value={authUsername()}
                     onInput={(e) => setAuthUsername(e.currentTarget.value)}
                     style={{ flex: 1 }}
@@ -1760,7 +1732,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                   <input
                     class="form-input"
                     type="password"
-                    placeholder="Password"
+                    placeholder={t("Password")}
                     value={authPassword()}
                     onInput={(e) => setAuthPassword(e.currentTarget.value)}
                     style={{ flex: 1 }}
@@ -1839,7 +1811,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           <div class="modal-dialog" style={{ width: "900px", "max-width": "90vw", height: "70vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
               <span class="modal-title">
-                Files — {images().find((i) => i.id === fileBrowserImage())?.repo_tags?.[0] || fileBrowserImage()?.slice(0, 12)}
+                {t("Files —")} {images().find((i) => i.id === fileBrowserImage())?.repo_tags?.[0] || fileBrowserImage()?.slice(0, 12)}
               </span>
               <button class="modal-close" onClick={closeFileBrowser}>{"\u00d7"}</button>
             </div>
@@ -1849,7 +1821,7 @@ export default function ImagesPage(props: ImagesPageProps) {
               <button
                 style={{ background: "none", border: "none", color: fileBrowserPath() === "/" || fileBrowserPath() === "" ? "#e6edf3" : "#58a6ff", cursor: "pointer", padding: "2px 6px", "font-size": "12px", "border-radius": "4px" }}
                 onClick={() => { const id = fileBrowserImage(); if (id) fetchImageFiles(id, "/"); }}
-                title="Root"
+                title={t("Root")}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "middle" }}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
               </button>
@@ -1878,14 +1850,14 @@ export default function ImagesPage(props: ImagesPageProps) {
             <div style={{ flex: "1", overflow: "auto" }}>
               <Show when={fileContent() !== null} fallback={
                 <Show when={!filesLoading()} fallback={
-                  <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> Loading files...</div>
+                  <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}><Spinner size={14} /> {t("Loading files...")}</div>
                 }>
                   <Show when={files().length > 0} fallback={
                     <Show when={fileError()} fallback={
-                      <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>Empty directory</div>
+                      <div style={{ padding: "20px", "text-align": "center", color: "#8b949e" }}>{t("Empty directory")}</div>
                     }>
                       <div style={{ padding: "16px 20px", color: "#f85149", background: "rgba(248, 81, 73, 0.1)", "border-radius": "6px", margin: "12px 16px", "font-size": "13px" }}>
-                        <strong>Error:</strong> {fileError()}
+                        <strong>{t("Error:")}</strong> {fileError()}
                       </div>
                     </Show>
                   }>
@@ -1897,7 +1869,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                         onClick={navigateUp}
                       >
                         <span style={{ color: "#8b949e", width: "16px", "text-align": "center", "flex-shrink": "0", "font-size": "10px" }}>{"\u25C0"}</span>
-                        <span>.. (parent)</span>
+                        <span>{t(".. (parent)")}</span>
                       </div>
                     </Show>
                     <For each={files()}>
@@ -1927,7 +1899,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 <div style={{ display: "flex", "flex-direction": "column", height: "100%" }}>
                   <div style={{ padding: "8px 16px", background: "#161b22", "border-bottom": "1px solid #21262d", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
                     <span style={{ "font-size": "12px", color: "#e6edf3" }}>{fileContentPath()}</span>
-                    <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>Back</button>
+                    <button class="btn btn-sm" onClick={() => setFileContent(null)} style={{ "font-size": "11px", padding: "2px 8px" }}>{t("Back")}</button>
                   </div>
                   <pre style={{
                     padding: "12px 16px",
@@ -1955,7 +1927,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setReportPath(null); }}>
           <div class="modal-dialog" style={{ "max-width": "520px" }}>
             <div class="modal-header">
-              <span class="modal-title">Report downloaded</span>
+              <span class="modal-title">{t("Report downloaded")}</span>
               <button class="modal-close" onClick={() => setReportPath(null)}>{"\u00d7"}</button>
             </div>
             <div class="modal-body" style={{ "text-align": "center", padding: "24px" }}>
@@ -1964,8 +1936,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 <polyline points="22 4 12 14.01 9 11.01"/>
               </svg>
               <div style={{ "font-size": "15px", "font-weight": "600", "margin-bottom": "8px" }}>
-                Vulnerability report saved
-              </div>
+                {t("Vulnerability report saved")}</div>
               <div class="mono" style={{
                 "font-size": "11px", color: "#8b949e",
                 background: "#161b22", padding: "8px 12px", "border-radius": "6px",
@@ -1974,7 +1945,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 {reportPath()}
               </div>
               <div style={{ display: "flex", gap: "8px", "justify-content": "center" }}>
-                <button class="btn btn-primary" onClick={() => setReportPath(null)}>Close</button>
+                <button class="btn btn-primary" onClick={() => setReportPath(null)}>{t("Close")}</button>
               </div>
             </div>
           </div>
@@ -1987,7 +1958,7 @@ export default function ImagesPage(props: ImagesPageProps) {
           onClick={(e) => { if ((e.currentTarget as any).__mdTarget === e.target && (e.target as HTMLElement).classList.contains("modal-overlay")) setLayersDialogImage(null); }}>
           <div class="modal-dialog" style={{ "max-width": "800px", "max-height": "80vh", display: "flex", "flex-direction": "column" }}>
             <div class="modal-header">
-              <span class="modal-title">Image Layers — {layersDialogImage()?.repo_tags?.[0] || shortId(layersDialogImage()?.id)}</span>
+              <span class="modal-title">{t("Image Layers —")} {layersDialogImage()?.repo_tags?.[0] || shortId(layersDialogImage()?.id)}</span>
               <button class="modal-close" onClick={() => setLayersDialogImage(null)}>&times;</button>
             </div>
             <div style={{ padding: "16px", overflow: "auto", flex: "1" }}>
@@ -2010,7 +1981,7 @@ export default function ImagesPage(props: ImagesPageProps) {
                 return (
                   <>
                     <div style={{ "font-size": "12px", color: "#8b949e", "margin-bottom": "12px" }}>
-                      {historyItems.length} layers — Total: {formatBytes(totalSize)}
+                      {historyItems.length} {t("layers — Total:")} {formatBytes(totalSize)}
                     </div>
                     <Index each={historyItems}>
                       {(itemAccessor: () => any, index: number) => {

@@ -13,6 +13,7 @@ import { openFolderDialog } from "../lib/openFolder";
 import { requestIntent } from "../lib/pageIntent";
 import { openContainerOn } from "../lib/containerTab";
 import type { GatewayRoute } from "../lib/types";
+import { t, AVAILABLE_LOCALES, setLocale } from "../lib/i18n";
 
 interface Command {
   id: string;
@@ -38,12 +39,12 @@ const mod = navigator.platform.includes("Mac") ? "⌘" : "Ctrl+";
 
 /** 3: starts with the query, 2: a word starts with it, 1: contains it, 0.5: fuzzy, 0: no match. */
 function score(text: string, q: string): number {
-  const t = text.toLowerCase();
-  if (t.startsWith(q)) return 3;
-  if (t.split(/[\s\-_/.:]+/).some((w) => w.startsWith(q))) return 2;
-  if (t.includes(q)) return 1;
+  const tx = text.toLowerCase();
+  if (tx.startsWith(q)) return 3;
+  if (tx.split(/[\s\-_/.:]+/).some((w) => w.startsWith(q))) return 2;
+  if (tx.includes(q)) return 1;
   let i = 0;
-  for (const ch of t) if (ch === q[i]) i++;
+  for (const ch of tx) if (ch === q[i]) i++;
   return i === q.length ? 0.5 : 0;
 }
 
@@ -63,6 +64,19 @@ export default function CommandPalette(props: CommandPaletteProps) {
   const intent = (page: string, action: string) => run(() => { requestIntent(page, action); props.onNavigate(page); });
 
   const actions: Command[] = [
+    // Language, so switching is one keystroke away as well as in Settings. The
+    // command name stays in its own language: it is what the user searches for.
+    ...AVAILABLE_LOCALES.map((l) => ({
+      id: `lang-${l.code}`,
+      name: `Language: ${l.nativeLabel}`,
+      icon: "◎",
+      category: "Language",
+      action: () => {
+        setLocale(l.code);
+        props.onClose();
+        showToast(t("Language changed"), "success");
+      },
+    })),
     { id: "open-folder", name: "Open a project folder…", icon: "▤", category: "Actions", action: run(() => openFolderDialog()) },
     { id: "add-project", name: "Add a git repository for worktrees", icon: "⑂", category: "Actions", action: go("projects") },
     { id: "run", name: "Run a container…", icon: "▶", category: "Actions", action: intent("containers", "run") },
@@ -74,9 +88,9 @@ export default function CommandPalette(props: CommandPaletteProps) {
     { id: "gw-start", name: "Start the gateway", icon: "▶", category: "Actions", action: run(async () => {
       try {
         await invoke("gateway_start");
-        showToast("Gateway started", "success");
+        showToast(t("Gateway started"), "success");
       } catch (e) {
-        showToast(`Failed to start gateway: ${e}`, "error");
+        showToast(t("Failed to start gateway: {e}", { e: e }), "error");
       }
     }) },
     { id: "gw-stop", name: "Stop the gateway", icon: "■", category: "Actions", action: run(async () => {
@@ -88,14 +102,14 @@ export default function CommandPalette(props: CommandPaletteProps) {
       if (!ok) return;
       try {
         await invoke("gateway_stop");
-        showToast("Gateway stopped", "success");
+        showToast(t("Gateway stopped"), "success");
       } catch (e) {
-        showToast(`Failed to stop gateway: ${e}`, "error");
+        showToast(t("Failed to stop gateway: {e}", { e: e }), "error");
       }
     }) },
     { id: "stop-all", name: "Stop all containers", icon: "■", category: "Actions", action: run(async () => {
       const running = containers().filter((c) => c.state === "Running");
-      if (running.length === 0) return showToast("No running containers", "info");
+      if (running.length === 0) return showToast(t("No running containers"), "info");
       const ok = await confirmDanger({
         title: `Stop ${running.length} running container${running.length !== 1 ? "s" : ""}?`,
         message: "Every running container on the active host is stopped. Work in progress may be lost.",
@@ -152,8 +166,8 @@ export default function CommandPalette(props: CommandPaletteProps) {
         ? [{ id: `sh-${c.id}`, name: `Shell in ${c.name}`, icon: ">_", category: "Containers", action: run(() => { openContainerOn(c.id, "terminal"); props.onNavigate(`container:${c.id}`); }) }]
         : []),
     ]),
-    ...images().flatMap((i) => i.repo_tags.filter((t) => t !== "<none>:<none>").map((t) => ({
-      id: `img-${i.id}-${t}`, name: t, hint: "image", icon: "▨", category: "Images", action: go("images"),
+    ...images().flatMap((i) => i.repo_tags.filter((tx1) => tx1 !== "<none>:<none>").map((tx2) => ({
+      id: `img-${i.id}-${tx2}`, name: tx2, hint: "image", icon: "▨", category: "Images", action: go("images"),
     }))),
   ]);
 
@@ -230,7 +244,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
           ref={inputRef}
           class="command-palette-input"
           type="text"
-          placeholder="Search stacks, containers, images, URLs, or type a command…"
+          placeholder={t("Search stacks, containers, images, URLs, or type a command…")}
           value={query()}
           onInput={(e) => {
             setQuery(e.currentTarget.value);
@@ -253,7 +267,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
                         <Show when={cmd.img} fallback={cmd.icon}>{(src) => <img class="command-item-img" src={src()} alt="" />}</Show>
                       </span>
                       <span class="command-item-name">{cmd.name}</span>
-                      <Show when={cmd.hint}><span class="command-item-hint">{cmd.hint}</span></Show>
+                      <Show when={cmd.hint}><span class="command-item-hint">{t(cmd.hint)}</span></Show>
                       <Show when={cmd.shortcut}>
                         <span class="command-item-shortcut">{cmd.shortcut}</span>
                       </Show>
@@ -264,12 +278,12 @@ export default function CommandPalette(props: CommandPaletteProps) {
             )}
           </For>
           <Show when={filtered().length === 0}>
-            <div class="command-palette-empty">Nothing matches “{query()}”</div>
+            <div class="command-palette-empty">{t("Nothing matches “")}{query()}”</div>
           </Show>
         </div>
         <div class="command-palette-foot">
-          <span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span><span><kbd>esc</kbd> to close</span>
-          <span class="command-palette-foot-right"><kbd>{mod}K</kbd> anywhere</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> {t("to move")}</span><span><kbd>↵</kbd> {t("to open")}</span><span><kbd>esc</kbd> {t("to close")}</span>
+          <span class="command-palette-foot-right"><kbd>{mod}K</kbd> {t("anywhere")}</span>
         </div>
       </div>
     </div>

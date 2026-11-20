@@ -3,6 +3,7 @@
 import { For, Show, JSX } from "solid-js";
 import type { JobStep, StepStatus } from "../../lib/dev";
 import { DATA_MODE_LABEL, dataModeDescription } from "../../lib/dev";
+import { t } from "../../lib/i18n";
 
 const Check = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
@@ -36,7 +37,7 @@ export function JobSteps(props: { steps: JobStep[] }) {
         {(s) => (
           <div class={`dev-step dev-step-${s.status}`}>
             <StepIcon status={s.status} />
-            <span class="dev-step-label">{s.label}</span>
+            <span class="dev-step-label">{t(s.label)}</span>
             <Show when={s.detail && s.status !== "failed"}>
               <span class="dev-step-detail" title={s.detail ?? ""}>{s.detail}</span>
             </Show>
@@ -61,7 +62,7 @@ export function JobProgress(props: { steps: JobStep[] }) {
       <Show when={current()}>
         <div class="dev-progress-label">
           <span class="dev-step-spinner" />
-          {current()!.label}
+          {t(current()!.label)}
           <span style={{ color: "#6e7681", "margin-left": "auto" }}>
             {doneCount()}/{props.steps.length}
           </span>
@@ -181,7 +182,7 @@ export function DataModePicker(props: {
               <span>
                 <div class="dev-option-title">
                   {DATA_MODE_LABEL[m]}
-                  {m === props.choice.default_mode ? <span style={{ color: "#6e7681", "font-weight": 400 }}> · default</span> : null}
+                  {m === props.choice.default_mode ? <span style={{ color: "#6e7681", "font-weight": 400 }}> {t("· default")}</span> : null}
                 </div>
                 <div class="dev-option-desc">
                   {unavailable() ? props.choice.own_database_note : dataModeDescription(m, props.choice)}

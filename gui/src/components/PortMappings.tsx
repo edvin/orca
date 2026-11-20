@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import type { PortGroup } from "../lib/ports";
+import { t } from "../lib/i18n";
 
 /** The run's or port's number on this computer, if published. */
 function hostText(g: PortGroup): string | undefined {
@@ -45,7 +46,7 @@ export default function PortMappings(props: { groups: PortGroup[]; cards?: boole
                   style={{ "font-size": "12px", "line-height": "1.8", display: "flex", gap: "6px", "align-items": "baseline", "min-width": "0", "white-space": "nowrap" }}
                   title={g.label ? `${g.label}, ${proto}` : proto}
                 >
-                  <Show when={host} fallback={<span style={{ color: "#6e7681" }}>not published</span>}>
+                  <Show when={host} fallback={<span style={{ color: "#6e7681" }}>{t("not published")}</span>}>
                     <Show when={href} fallback={<span style={{ color: "#c9d1d9" }}>:{host}</span>}>
                       <a href={href} target="_blank" rel="noopener noreferrer" onClick={stop} style={{ color: "#58a6ff" }}>:{host}</a>
                     </Show>
@@ -53,7 +54,7 @@ export default function PortMappings(props: { groups: PortGroup[]; cards?: boole
                   <span style={{ color: "#484f58" }}>{"→"}</span>
                   <span style={{ color: "#8b949e" }}>{containerText(g)}/{g.protocol}</span>
                   <Show when={g.label}>
-                    <span style={{ color: "#6e7681", "font-family": "inherit", overflow: "hidden", "text-overflow": "ellipsis" }}>{g.label}</span>
+                    <span style={{ color: "#6e7681", "font-family": "inherit", overflow: "hidden", "text-overflow": "ellipsis" }}>{t(g.label)}</span>
                   </Show>
                 </div>
               }
@@ -88,8 +89,7 @@ export default function PortMappings(props: { groups: PortGroup[]; cards?: boole
                     onClick={stop}
                     title={`Open ${href}`}
                   >
-                    Open
-                  </a>
+                    {t("Open")}</a>
                 </Show>
               </div>
             </Show>

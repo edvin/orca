@@ -4,6 +4,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import HelpLink from "../HelpLink";
+import { t } from "../../lib/i18n";
 
 interface GatewayRequest {
   at: number;
@@ -69,17 +70,16 @@ export default function RequestsTab() {
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
       <div style={{ color: "#8b949e", "font-size": "13px" }}>
-        Every request through the gateway, newest first. A failed one says why.{" "}
+        {t("Every request through the gateway, newest first. A failed one says why.")}{" "}
         <HelpLink path="/docs/gateway/#requests" />
       </div>
       <div style={{ display: "flex", gap: "8px", "align-items": "center", "flex-wrap": "wrap" }}>
         <input class="form-input" type="search" style={{ flex: "1", "min-width": "240px", "max-width": "460px" }}
-          placeholder="Filter: hostname, path, project or status (502)" value={query()} onInput={(e) => onQuery(e.currentTarget.value)} />
+          placeholder={t("Filter: hostname, path, project or status (502)")} value={query()} onInput={(e) => onQuery(e.currentTarget.value)} />
         <button class="btn btn-sm" classList={{ "btn-primary": problems() }} onClick={() => { setProblems(!problems()); load(); }}>
-          Only problems
-        </button>
+          {t("Only problems")}</button>
       </div>
-      <Show when={requests()} fallback={<div style={{ color: "#8b949e", "font-size": "13px" }}>Loading…</div>}>
+      <Show when={requests()} fallback={<div style={{ color: "#8b949e", "font-size": "13px" }}>{t("Loading…")}</div>}>
         {(list) => (
           <Show when={list().length > 0} fallback={
             <div class="empty" style={{ padding: "32px" }}>
@@ -90,12 +90,12 @@ export default function RequestsTab() {
             <table class="table gw-requests">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Status</th>
-                  <th>Request</th>
-                  <th>Route</th>
-                  <th style={{ "text-align": "right" }}>Time taken</th>
-                  <th style={{ "text-align": "right" }}>Size</th>
+                  <th>{t("Time")}</th>
+                  <th>{t("Status")}</th>
+                  <th>{t("Request")}</th>
+                  <th>{t("Route")}</th>
+                  <th style={{ "text-align": "right" }}>{t("Time taken")}</th>
+                  <th style={{ "text-align": "right" }}>{t("Size")}</th>
                 </tr>
               </thead>
               <tbody>

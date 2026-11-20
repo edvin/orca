@@ -3,6 +3,7 @@
 import { createResource, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./Toast";
+import { t } from "../lib/i18n";
 
 interface FolderApp {
   id: string;
@@ -57,7 +58,7 @@ export default function FolderActions(props: { path: string; compact?: boolean }
           {(a) => (
             <Show when={props.compact} fallback={
               <button class="btn btn-sm" title={`Open ${props.path} in ${a.label}`} onClick={() => void open(a)}>
-                Open in {a.label}
+                {t("Open in")} {t(a.label)}
               </button>
             }>
               <button class="btn btn-sm btn-icon" data-tip={`Open in ${a.label}`} aria-label={`Open in ${a.label}`}

@@ -17,6 +17,7 @@ import SetupWizard from "../components/dev/SetupWizard";
 import OrcaYamlEditor from "../components/dev/OrcaYamlEditor";
 import { StatusDot } from "../components/dev/DevBits";
 import Topology from "../components/dev/Topology";
+import { t } from "../lib/i18n";
 
 interface Props {
   onNavigate?: (target: string) => void;
@@ -215,7 +216,7 @@ export default function ProjectsPage(props: Props) {
     if (!ok) return;
     try {
       await devApi.removeProject(p.id);
-      showToast(`Unregistered ${p.id}`, "success");
+      showToast(t("Unregistered {value1}", { value1: p.id }), "success");
       setSelectedId(null);
       refresh();
     } catch (e) {
@@ -276,9 +277,9 @@ export default function ProjectsPage(props: Props) {
     <div>
       <div class="page-header">
         <div>
-          <h1 class="page-title">Worktrees</h1>
+          <h1 class="page-title">{t("Worktrees")}</h1>
           <div class="dev-subtitle">
-            Every git worktree of a project, running side by side.{" "}
+            {t("Every git worktree of a project, running side by side.")}{" "}
             <HelpLink path="/docs/worktrees/" />
           </div>
         </div>
@@ -291,8 +292,7 @@ export default function ProjectsPage(props: Props) {
                 setAddOpen(true);
               }}
             >
-              Add project
-            </button>
+              {t("Add project")}</button>
           </div>
         </Show>
       </div>
@@ -305,11 +305,10 @@ export default function ProjectsPage(props: Props) {
               <div class="dev-candidate">
                 <div style={{ flex: 1, "min-width": 0 }}>
                   <div style={{ color: "#e6edf3", "font-weight": 500, "font-size": "13px" }}>
-                    {c.name ?? c.root} has an orca.yaml set up for worktrees
-                  </div>
+                    {c.name ?? c.root} {t("has an orca.yaml set up for worktrees")}</div>
                   <div class="mono" style={{ color: "#8b949e", "font-size": "11px" }}>{tildify(c.root)}</div>
                 </div>
-                <button class="btn btn-sm btn-primary" disabled={adding()} onClick={() => addProject(c.root)}>Add</button>
+                <button class="btn btn-sm btn-primary" disabled={adding()} onClick={() => addProject(c.root)}>{t("Add")}</button>
               </div>
             )}
           </For>
@@ -335,7 +334,7 @@ export default function ProjectsPage(props: Props) {
         <div class="modal-overlay" onClick={() => setAddOpen(false)}>
           <div class="modal-dialog" style={{ width: "640px" }} onClick={(e) => e.stopPropagation()}>
             <div class="modal-header">
-              <div class="modal-title">Add a project</div>
+              <div class="modal-title">{t("Add a project")}</div>
               <button class="modal-close" onClick={() => setAddOpen(false)}>×</button>
             </div>
             <div class="modal-body">
@@ -366,7 +365,7 @@ export default function ProjectsPage(props: Props) {
               >
                 {p.id}
                 <Show when={runningCount(p) > 0}>
-                  <span class="dev-count">{runningCount(p)} running</span>
+                  <span class="dev-count">{runningCount(p)} {t("running")}</span>
                 </Show>
               </button>
             )}
@@ -382,26 +381,26 @@ export default function ProjectsPage(props: Props) {
                 <div class="dev-header-name">{p().id}</div>
                 <div class="dev-header-path">
                   <span class="mono dev-path" style={{ "max-width": "640px" }} title={p().root}><span>{tildify(p().root)}</span></span>
-                  <button class="dev-icon-btn" title="Open folder" onClick={() => invoke("reveal_path", { path: p().root }).catch((e) => showToast(String(e), "error"))}>
+                  <button class="dev-icon-btn" title={t("Open folder")} onClick={() => invoke("reveal_path", { path: p().root }).catch((e) => showToast(String(e), "error"))}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg>
                   </button>
                 </div>
                 <div class="dev-chips">
-                  <span class="dev-chip">{(p().instances ?? []).length} worktree{(p().instances ?? []).length === 1 ? "" : "s"}</span>
+                  <span class="dev-chip">{(p().instances ?? []).length} {t("worktree")}{(p().instances ?? []).length === 1 ? "" : "s"}</span>
                   <Show when={p().orca_yaml}>
                     <Show
                       when={p().orca_yaml!.has_dev}
-                      fallback={<span class="dev-chip dev-chip-warn" title="orca.yaml has no dev: section; Orca guessed the setup">Suggested setup</span>}
+                      fallback={<span class="dev-chip dev-chip-warn" title={t("orca.yaml has no dev: section; Orca guessed the setup")}>{t("Suggested setup")}</span>}
                     >
-                      <span class="dev-chip dev-chip-ok" title="Setup comes from the dev: section of orca.yaml">orca.yaml</span>
+                      <span class="dev-chip dev-chip-ok" title={t("Setup comes from the dev: section of orca.yaml")}>{t("orca.yaml")}</span>
                     </Show>
                   </Show>
                   <Show when={p().gateway}>
                     <span
                       class={`dev-chip ${p().gateway!.running ? "dev-chip-ok" : ""}`}
-                      title="The gateway gives each instance its own HTTPS hostname. Orca starts it when an instance needs it."
+                      title={t("The gateway gives each instance its own HTTPS hostname. Orca starts it when an instance needs it.")}
                     >
-                      Gateway {p().gateway!.running ? "running" : "starts on demand"}
+                      {t("Gateway")} {p().gateway!.running ? "running" : "starts on demand"}
                       {p().gateway!.https_port !== 443 ? ` · :${p().gateway!.https_port}` : ""}
                     </span>
                   </Show>
@@ -409,10 +408,10 @@ export default function ProjectsPage(props: Props) {
               </div>
               <div style={{ display: "flex", gap: "6px" }}>
                 <Show when={p().orca_yaml && !p().orca_yaml!.has_dev}>
-                  <button class="btn btn-sm btn-primary" onClick={() => setWizard(true)}>Set up worktrees…</button>
+                  <button class="btn btn-sm btn-primary" onClick={() => setWizard(true)}>{t("Set up worktrees…")}</button>
                 </Show>
-                <button class="btn btn-sm" onClick={() => setYamlEditor(true)} title="Edit the dev: section as a form or as YAML">orca.yaml</button>
-                <button class="btn btn-sm btn-outline" onClick={() => removeProject(p())}>Unregister</button>
+                <button class="btn btn-sm" onClick={() => setYamlEditor(true)} title={t("Edit the dev: section as a form or as YAML")}>{t("orca.yaml")}</button>
+                <button class="btn btn-sm btn-outline" onClick={() => removeProject(p())}>{t("Unregister")}</button>
               </div>
             </div>
 
@@ -425,9 +424,9 @@ export default function ProjectsPage(props: Props) {
               <div class="dev-warning" style={{ "margin-bottom": "12px", display: "flex", gap: "10px", "align-items": "flex-start" }}>
                 <div style={{ flex: 1 }}>
                   {p().gateway!.dns!.problem}{" "}
-                  <a class="dev-action-link" onClick={() => props.onNavigate?.("gateway")}>Change the gateway domain</a>
+                  <a class="dev-action-link" onClick={() => props.onNavigate?.("gateway")}>{t("Change the gateway domain")}</a>
                 </div>
-                <button class="modal-close" style={{ "font-size": "16px" }} title="Hide for this domain" onClick={() => dismissDns(p().gateway!.dns!.host)}>×</button>
+                <button class="modal-close" style={{ "font-size": "16px" }} title={t("Hide for this domain")} onClick={() => dismissDns(p().gateway!.dns!.host)}>×</button>
               </div>
             </Show>
 
@@ -435,13 +434,10 @@ export default function ProjectsPage(props: Props) {
               <div class="dev-explainer">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "flex-shrink": 0, "margin-top": "1px" }}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
                 <div>
-                  Orca picked <b>{p().shared.map((s) => s.name).join(", ")}</b> to run once and be shared by every worktree,
-                  because {p().shared.length === 1 ? "it is" : "they are"} infrastructure images not built from your repo.
-                  Everything else runs once per worktree.{" "}
+                  {t("Orca picked")} <b>{p().shared.map((s) => s.name).join(", ")}</b> {t("to run once and be shared by every worktree, because")}{p().shared.length === 1 ? "it is" : "they are"} {t("infrastructure images not built from your repo. Everything else runs once per worktree.")}{" "}
                   <a href="#" style={{ color: "#58a6ff" }} onClick={(e) => { e.preventDefault(); setWizard(true); }}>
-                    Review and save this setup
-                  </a>{" "}
-                  to change it and share it with your team through <span class="mono">orca.yaml</span>.
+                    {t("Review and save this setup")}</a>{" "}
+                  {t("to change it and share it with your team through")} <span class="mono">{t("orca.yaml")}</span>.
                 </div>
               </div>
             </Show>
@@ -449,16 +445,14 @@ export default function ProjectsPage(props: Props) {
             <Show when={p().shared.length > 0}>
               <div class="dev-lane">
                 <div class="dev-lane-label">
-                  Shared services
-                  <span class="dev-lane-hint">run once, used by every worktree</span>
+                  {t("Shared services")}<span class="dev-lane-hint">{t("run once, used by every worktree")}</span>
                   <div class="dev-lane-actions">
                     <Show
                       when={p().shared.some((s) => s.status === "running")}
-                      fallback={<button class="btn btn-sm" disabled={sharedBusy()} onClick={() => sharedAction(p(), true)}>Start shared</button>}
+                      fallback={<button class="btn btn-sm" disabled={sharedBusy()} onClick={() => sharedAction(p(), true)}>{t("Start shared")}</button>}
                     >
-                      <button class="btn btn-sm btn-outline" disabled={sharedBusy()} onClick={() => sharedAction(p(), false)} title="Instances lose their database until it starts again">
-                        Stop shared
-                      </button>
+                      <button class="btn btn-sm btn-outline" disabled={sharedBusy()} onClick={() => sharedAction(p(), false)} title={t("Instances lose their database until it starts again")}>
+                        {t("Stop shared")}</button>
                     </Show>
                   </div>
                 </div>
@@ -498,20 +492,19 @@ export default function ProjectsPage(props: Props) {
 
             <div class="dev-lane">
               <div class="dev-lane-label">
-                Instances
-                <span class="dev-lane-hint">one per worktree · nothing starts until you (or an agent) start it</span>
+                {t("Instances")}<span class="dev-lane-hint">{t("one per worktree · nothing starts until you (or an agent) start it")}</span>
                 <div class="dev-lane-actions">
                   <div class="dev-seg">
-                    <button classList={{ active: view() === "board" }} onClick={() => setViewPersist("board")}>Cards</button>
-                    <button classList={{ active: view() === "topology" }} onClick={() => setViewPersist("topology")}>Topology</button>
+                    <button classList={{ active: view() === "board" }} onClick={() => setViewPersist("board")}>{t("Cards")}</button>
+                    <button classList={{ active: view() === "topology" }} onClick={() => setViewPersist("topology")}>{t("Topology")}</button>
                   </div>
                   <Show when={cleanupCandidates().length > 0}>
-                    <button class="btn btn-sm" onClick={cleanUp} title="Instances whose worktree is gone or whose remote branch was deleted">
-                      Clean up {cleanupCandidates().length}
+                    <button class="btn btn-sm" onClick={cleanUp} title={t("Instances whose worktree is gone or whose remote branch was deleted")}>
+                      {t("Clean up")} {cleanupCandidates().length}
                     </button>
                   </Show>
                   <Show when={(p().instances ?? []).filter(live).length > 1}>
-                    <button class="btn btn-sm btn-outline" onClick={stopAll}>Stop all</button>
+                    <button class="btn btn-sm btn-outline" onClick={stopAll}>{t("Stop all")}</button>
                   </Show>
                 </div>
               </div>
@@ -533,9 +526,7 @@ export default function ProjectsPage(props: Props) {
                 </For>
               </div>
               <div class="form-hint" style={{ "margin-top": "10px" }}>
-                New worktrees show up here automatically (<span class="mono">git worktree add ../{p().id}-feature</span>). From a
-                worktree, <span class="mono">orca up</span> starts its instance.
-              </div>
+                {t("New worktrees show up here automatically (")}<span class="mono">{t("git worktree add ../")}{p().id}{t("-feature")}</span>{t("). From a worktree,")}<span class="mono">{t("orca up")}</span> {t("starts its instance.")}</div>
             </div>
 
             <Show when={drawerInst()}>
@@ -602,16 +593,14 @@ function EmptyState(props: {
         <div class="dev-empty-intro">
           <Illustration />
           <div>
-            <h2>One running copy of your app per worktree</h2>
+            <h2>{t("One running copy of your app per worktree")}</h2>
             <p>
-              Each worktree gets its own URLs and ports; databases run once and are shared. Your compose files stay as
-              they are.
-            </p>
+              {t("Each worktree gets its own URLs and ports; databases run once and are shared. Your compose files stay as they are.")}</p>
           </div>
         </div>
       </Show>
       <Show when={props.compact}>
-        <p style={{ "margin-bottom": "14px" }}>Pick any folder inside a git repository; Orca finds the main checkout and all its worktrees.</p>
+        <p style={{ "margin-bottom": "14px" }}>{t("Pick any folder inside a git repository; Orca finds the main checkout and all its worktrees.")}</p>
       </Show>
       <form
         class="dev-path-input"
@@ -621,20 +610,19 @@ function EmptyState(props: {
         }}
       >
         <button class="btn btn-primary" type="button" disabled={props.adding} onClick={props.onPick}>
-          Choose a repository…
-        </button>
+          {t("Choose a repository…")}</button>
         <input
           class="form-input mono"
           style={{ flex: 1 }}
-          placeholder="or paste a path: ~/code/myapp"
+          placeholder={t("or paste a path: ~/code/myapp")}
           value={props.pathInput}
           onInput={(e) => props.setPathInput(e.currentTarget.value)}
         />
-        <button class="btn" type="submit" disabled={props.adding || !props.pathInput.trim()}>Add</button>
+        <button class="btn" type="submit" disabled={props.adding || !props.pathInput.trim()}>{t("Add")}</button>
       </form>
       <Show when={props.candidates.length > 0}>
         <div class="dev-candidates">
-          <div class="dev-section-title">Found on this machine</div>
+          <div class="dev-section-title">{t("Found on this machine")}</div>
           <For each={[...props.candidates].sort((a, b) => Number(!!b.has_dev) - Number(!!a.has_dev))}>
             {(c) => (
               <div class="dev-candidate">
@@ -642,14 +630,14 @@ function EmptyState(props: {
                   <div style={{ color: "#e6edf3", "font-weight": 500, "font-size": "13px" }}>
                     {c.name ?? c.root}
                     <Show when={c.has_dev}>
-                      <span title="Its orca.yaml already has a dev: section" style={{ "margin-left": "8px", "font-size": "10px", "font-weight": 600, "text-transform": "uppercase", "letter-spacing": "0.04em", color: "#3fb950", border: "1px solid #238636", "border-radius": "4px", padding: "1px 5px" }}>orca.yaml ready</span>
+                      <span title={t("Its orca.yaml already has a dev: section")} style={{ "margin-left": "8px", "font-size": "10px", "font-weight": 600, "text-transform": "uppercase", "letter-spacing": "0.04em", color: "#3fb950", border: "1px solid #238636", "border-radius": "4px", padding: "1px 5px" }}>{t("orca.yaml ready")}</span>
                     </Show>
                   </div>
                   <div class="mono" style={{ color: "#8b949e", "font-size": "11px" }}>
-                    {tildify(c.root)} · running as {c.stacks.join(", ")}
+                    {tildify(c.root)} {t("· running as")} {c.stacks.join(", ")}
                   </div>
                 </div>
-                <button class="btn btn-sm btn-primary" disabled={props.adding} onClick={() => props.onAdd(c.root)}>Add</button>
+                <button class="btn btn-sm btn-primary" disabled={props.adding} onClick={() => props.onAdd(c.root)}>{t("Add")}</button>
               </div>
             )}
           </For>
@@ -665,7 +653,7 @@ function Illustration() {
     <svg width="300" height="132" viewBox="0 0 300 132" fill="none" style={{ display: "block", margin: "0 auto" }}>
       <rect x="70" y="6" width="160" height="34" rx="8" fill="rgba(63,185,80,0.08)" stroke="rgba(63,185,80,0.45)" />
       <circle cx="90" cy="23" r="4" fill="#3fb950" />
-      <text x="102" y="27" fill="#c9d1d9" font-size="11" font-family="sans-serif">postgres · redis</text>
+      <text x="102" y="27" fill="#c9d1d9" font-size="11" font-family="sans-serif">{t("postgres · redis")}</text>
       <path d="M150 40v14M60 54h180M60 54v14M150 54v14M240 54v14" stroke="#30363d" stroke-width="1.5" />
       <For each={[0, 1, 2]}>
         {(i) => (

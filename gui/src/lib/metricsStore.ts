@@ -1,6 +1,7 @@
 import { batch, createMemo, createRoot, createSignal, type Accessor, type Setter } from "solid-js";
 import { showToast } from "../components/Toast";
 import { formatBytes } from "./format";
+import { t } from "./i18n";
 
 export interface MetricSnapshot {
   timestamp: number;
@@ -84,7 +85,7 @@ function evaluateAlerts(containerId: string, containerName: string, snapshot: Me
       const key = `${containerId}:memory`;
       if (canAlert(key)) {
         showToast(
-          `Container '${containerName}' is using ${Math.round(memPercent)}% of its memory limit (${formatBytes(snapshot.memory)} / ${formatBytes(snapshot.memoryLimit)})`,
+          t("Container '{containerName}' is using {value2}% of its memory limit ({value3} / {value4})", { containerName: containerName, value2: Math.round(memPercent), value3: formatBytes(snapshot.memory), value4: formatBytes(snapshot.memoryLimit) }),
           "info"
         );
       }
@@ -92,22 +93,22 @@ function evaluateAlerts(containerId: string, containerName: string, snapshot: Me
   }
 
   // CPU alert: above the threshold in every reading for CPU_SUSTAINED_MS, with no gap
-  const t = snapshot.timestamp;
+  const tx = snapshot.timestamp;
   const previous = lastReadingAt[containerId];
-  lastReadingAt[containerId] = t;
+  lastReadingAt[containerId] = tx;
   if (snapshot.cpu <= CPU_THRESHOLD_PERCENT) {
     delete highCpuSince[containerId];
     return;
   }
-  if (highCpuSince[containerId] === undefined || previous === undefined || t - previous > MAX_READING_GAP_MS) {
-    highCpuSince[containerId] = t;
+  if (highCpuSince[containerId] === undefined || previous === undefined || tx - previous > MAX_READING_GAP_MS) {
+    highCpuSince[containerId] = tx;
   }
 
-  if (t - highCpuSince[containerId] >= CPU_SUSTAINED_MS) {
+  if (tx - highCpuSince[containerId] >= CPU_SUSTAINED_MS) {
     const key = `${containerId}:cpu`;
     if (canAlert(key)) {
       showToast(
-        `Container '${containerName}' CPU usage is at ${snapshot.cpu.toFixed(1)}% (sustained high usage)`,
+        t("Container '{containerName}' CPU usage is at {value2}% (sustained high usage)", { containerName: containerName, value2: snapshot.cpu.toFixed(1) }),
         "info"
       );
     }

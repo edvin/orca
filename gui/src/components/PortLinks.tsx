@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Show, onCleanup } from "solid-js";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import type { PortGroup } from "../lib/ports";
+import { t } from "../lib/i18n";
 
 /** How many ports a row shows before "+N". */
 const INLINE = 2;
@@ -79,7 +80,7 @@ export default function PortLinks(props: { groups: PortGroup[] }) {
           </button>
           <Show when={open()}>
             <div class="port-pop">
-              <div class="port-pop-title">{sorted().length} ports</div>
+              <div class="port-pop-title">{sorted().length} {t("ports")}</div>
               <For each={sorted()}>
                 {(g) => (
                   <div class={`port-pop-row ${isLink(g) ? "port-pop-row-web" : ""}`} title={describe(g)} onClick={() => isLink(g) && void shellOpen(url(g))}>

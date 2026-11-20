@@ -205,7 +205,7 @@ export default function VirtualLogList(props: VirtualLogListProps) {
       measured.set(key, h);
       if (Math.abs(offsets[i + 1] - offsets[i] - h) > 0.5) changed = true;
     }
-    if (changed) setMeasureTick((t) => t + 1);
+    if (changed) setMeasureTick((tx) => tx + 1);
     // The effect above may have pinned before the window's DOM caught up.
     else if (props.follow) stickToBottom();
   };

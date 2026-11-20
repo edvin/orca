@@ -1,31 +1,241 @@
-use std::path::PathBuf;
+//! Build script for the Tauri shell.
+//!
+//! Two jobs:
+//!
+//! 1. Keep the sidecar stubs present so `cargo check` / `cargo tauri dev` work
+//!    without building the daemon and the CLI first.
+//! 2. Generate the native menu translation table from the locale files the GUI
+//!    already ships, so adding a language is a single file in
+//!    `gui/src/lib/locales/` and never a Rust edit.
+
+use std::path::{Path, PathBuf};
 
 fn main() {
-    // Ensure the external binary stub exists so `cargo check` works
-    // without needing to build the daemon first.
-    // The real binary is placed here by the build/release pipeline.
+    ensure_sidecar_stubs();
+    generate_native_locales();
+    tauri_build::build()
+}
+
+/// Create an empty file for every sidecar `bundle.externalBin` names.
+///
+/// Tauri's resource check aborts with `resource path ... doesn't exist` when a
+/// sidecar listed in `tauri.conf.json` is missing, which is a confusing failure
+/// for what is only a "build the daemon first" precondition. A stub is enough to
+/// pass the check; the real binaries are copied in by the release pipeline.
+fn ensure_sidecar_stubs() {
     let target = std::env::var("TAURI_ENV_TARGET_TRIPLE")
         .or_else(|_| std::env::var("TARGET"))
         .unwrap_or_else(|_| "x86_64-unknown-linux-gnu".into());
 
     let bin_dir = PathBuf::from("binaries");
-    let bin_name = if target.contains("windows") {
-        format!("orca-daemon-{target}.exe")
-    } else {
-        format!("orca-daemon-{target}")
-    };
-    let bin_path = bin_dir.join(&bin_name);
+    let ext = if target.contains("windows") { ".exe" } else { "" };
 
-    if !bin_path.exists() {
-        std::fs::create_dir_all(&bin_dir).ok();
-        // Create an empty stub — enough to pass Tauri's resource check.
-        // It will be replaced by the actual daemon binary at build time.
-        std::fs::write(&bin_path, b"").ok();
+    for stem in ["orca-daemon", "orca"] {
+        let bin_path = bin_dir.join(format!("{stem}-{target}{ext}"));
+        if !bin_path.exists() {
+            std::fs::create_dir_all(&bin_dir).ok();
+            std::fs::write(&bin_path, b"").ok();
+            println!(
+                "cargo:warning=Created stub binary at {}, build {} for a real binary",
+                bin_path.display(),
+                stem
+            );
+        }
+    }
+}
+
+/// Emit `native_locales.rs` from `../gui/src/lib/locales/*.json`.
+///
+/// The GUI is the source of truth for translations, and its locale files are the
+/// one place a language is added. The native tray menu needs the same text but
+/// runs before (and outside) the webview, so this mirrors the files into a
+/// generated Rust table at build time rather than making anyone keep a second
+/// list in sync.
+///
+/// Only a tiny, deliberately simple subset of JSON is parsed: a flat object of
+/// string values plus an optional `$meta` object. That is exactly what a locale
+/// file is, and refusing anything else keeps the build from silently accepting a
+/// file the runtime would interpret differently.
+fn generate_native_locales() {
+    let locales_dir = Path::new("../gui/src/lib/locales");
+    // Watch the directory AND each file, because cargo's directory watching and
+    // its per-file watching catch different changes:
+    //   - a directory timestamp catches files being ADDED or REMOVED
+    //   - a per-file entry catches an existing file being EDITED
+    // Only declaring the directory misses an edit in place; only declaring the
+    // files misses a new language entirely. Both are needed for the promise that
+    // dropping a file is enough.
+    println!("cargo:rerun-if-changed={}", locales_dir.display());
+
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is set by cargo");
+    let out_path = Path::new(&out_dir).join("native_locales.rs");
+
+    let mut codes: Vec<String> = Vec::new();
+    let mut files: Vec<(String, String)> = Vec::new(); // (code, raw json)
+
+    if let Ok(entries) = std::fs::read_dir(locales_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(code) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            let Ok(raw) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            codes.push(code.to_string());
+            files.push((code.to_string(), raw));
+        }
+    }
+    for (code, _) in &files {
         println!(
-            "cargo:warning=Created stub binary at {}, build the daemon for a real binary",
-            bin_path.display()
+            "cargo:rerun-if-changed={}",
+            locales_dir.join(format!("{code}.json")).display()
         );
     }
+    // Deterministic output regardless of directory iteration order.
+    codes.sort();
 
-    tauri_build::build()
+    let mut tables = String::new();
+    for (code, raw) in &files {
+        let entries = parse_flat_json(raw);
+        tables.push_str(&format!("    ({code:?}, &[\n", code = code));
+        // Sorted for a stable generated file.
+        let mut pairs: Vec<&(String, String)> = entries.iter().collect();
+        pairs.sort();
+        for (source, translated) in pairs {
+            tables.push_str(&format!("        ({:?}, {:?}),\n", source, translated));
+        }
+        tables.push_str("    ]),\n");
+    }
+
+    let generated = format!(
+        "// @generated by src-tauri/build.rs from gui/src/lib/locales/*.json\n\
+         // Do not edit: add or change a locale file instead.\n\
+         \n\
+         /// Every locale that ships a dictionary, sorted by code.\n\
+         pub(crate) static NATIVE_LOCALES: &[(&str, &[(&str, &str)])] = &[\n\
+         {tables}];\n\
+         \n\
+         /// Locale codes present on disk, for validation and diagnostics.\n\
+         pub(crate) static NATIVE_LOCALE_CODES: &[&str] = &[{codes}];\n",
+        tables = tables,
+        codes = codes.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>().join(", ")
+    );
+
+    std::fs::write(&out_path, generated).expect("write native_locales.rs");
+}
+
+/// Parse a locale file: a flat `{ "source": "translation" }` object, with an
+/// optional `$meta` object whose scalar/array values are ignored here.
+///
+/// A hand-written parser rather than a dependency because the shape is fixed and
+/// tiny; pulling in serde_json just for the build script would cost more than it
+/// saves. Anything unexpected is skipped rather than failing the build — a
+/// malformed locale file should not stop the app from compiling.
+fn parse_flat_json(raw: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let bytes: Vec<char> = raw.chars().collect();
+    let mut i = 0;
+    let mut depth = 0usize;
+
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c == '{' {
+            depth += 1;
+            i += 1;
+            continue;
+        }
+        if c == '}' {
+            depth = depth.saturating_sub(1);
+            i += 1;
+            continue;
+        }
+        if c == '"' {
+            let (key, next) = read_string(&bytes, i);
+            i = next;
+            // Only key/value pairs at the top level of the object.
+            if depth != 1 {
+                continue;
+            }
+            // Skip whitespace and the colon.
+            while i < bytes.len() && bytes[i].is_whitespace() {
+                i += 1;
+            }
+            if i >= bytes.len() || bytes[i] != ':' {
+                continue;
+            }
+            i += 1;
+            while i < bytes.len() && bytes[i].is_whitespace() {
+                i += 1;
+            }
+            if i < bytes.len() && bytes[i] == '"' {
+                let (value, next) = read_string(&bytes, i);
+                i = next;
+                // `$meta` is metadata, not translatable copy.
+                if !key.starts_with('$') {
+                    out.push((key, value));
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Read a JSON string literal starting at `start` (which must be `"`).
+/// Returns the unescaped contents and the index just past the closing quote.
+fn read_string(chars: &[char], start: usize) -> (String, usize) {
+    debug_assert_eq!(chars[start], '"');
+    let mut out = String::new();
+    let mut i = start + 1;
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => {
+                i += 1;
+                if i >= chars.len() {
+                    break;
+                }
+                match chars[i] {
+                    'n' => out.push('\n'),
+                    't' => out.push('\t'),
+                    'r' => out.push('\r'),
+                    other => out.push(other),
+                }
+                i += 1;
+            }
+            '"' => return (out, i + 1),
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    (out, i)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_flat_object() {
+        let got = parse_flat_json(r#"{ "a": "b", "c": "d" }"#);
+        assert_eq!(got, vec![("a".into(), "b".into()), ("c".into(), "d".into())]);
+    }
+
+    #[test]
+    fn skips_meta_block() {
+        let got = parse_flat_json(r#"{ "$meta": { "match": ["zh"] }, "a": "b" }"#);
+        assert_eq!(got, vec![("a".into(), "b".into())]);
+    }
+
+    #[test]
+    fn handles_escapes_and_placeholders() {
+        let got = parse_flat_json(r#"{ "Say \"hi\"": "说 {name}" }"#);
+        assert_eq!(got, vec![("Say \"hi\"".into(), "说 {name}".into())]);
+    }
 }

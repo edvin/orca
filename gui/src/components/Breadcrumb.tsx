@@ -1,4 +1,5 @@
 import { For } from "solid-js";
+import { t } from "../lib/i18n";
 
 interface BreadcrumbItem {
   label: string;
@@ -18,11 +19,11 @@ export default function Breadcrumb(props: BreadcrumbProps) {
           return (
             <>
               {isLast() ? (
-                <span class="breadcrumb-current">{item.label}</span>
+                <span class="breadcrumb-current">{t(item.label)}</span>
               ) : (
                 <>
                   <button class="breadcrumb-item" onClick={() => item.onClick?.()}>
-                    {item.label}
+                    {t(item.label)}
                   </button>
                   <span class="breadcrumb-separator">{"\u203A"}</span>
                 </>

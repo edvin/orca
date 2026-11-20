@@ -27,6 +27,7 @@ import {
   type OwnService,
   type Snapshot,
 } from "../lib/databases";
+import { t } from "../lib/i18n";
 
 const openUrl = (url: string) => shellOpen(url).catch(() => window.open(url, "_blank", "noopener,noreferrer"));
 
@@ -54,9 +55,9 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
   // starting and stopping.
   const [snapshotsFor, setSnapshotsFor] = createSignal<{ serverId: string; dbName: string } | null>(null);
   const snapshotsTarget = () => {
-    const t = snapshotsFor();
-    const server = t && data()?.servers.find((s) => s.id === t.serverId);
-    const db = server?.databases.find((d) => d.name === t!.dbName);
+    const tx = snapshotsFor();
+    const server = tx && data()?.servers.find((s) => s.id === tx.serverId);
+    const db = server?.databases.find((d) => d.name === tx!.dbName);
     return server && db ? { server, db } : null;
   };
 
@@ -97,7 +98,7 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
     if (!ok) return;
     await run(`reset:${server.id}/${db.name}`, async () => {
       const r = await databasesApi.reset(server.id, db.name);
-      if (r.seed_output) showToast(`Seeded: ${r.seed_output.split("\n").filter(Boolean).pop()}`, "info");
+      if (r.seed_output) showToast(t("Seeded: {value1}", { value1: r.seed_output.split("\n").filter(Boolean).pop() }), "info");
     }, `${db.name} is empty again`);
   };
 
@@ -116,19 +117,19 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
     return server && db ? { server, db } : null;
   };
   const importInto = async (o: OwnService) => {
-    const t = targetOf(o);
-    if (!t) return;
+    const tx1 = targetOf(o);
+    if (!tx1) return;
     const ok = await confirmDanger({
       title: `Import ${o.project}'s data`,
-      message: `Copies ${o.database ?? "the database"} from ${o.container} (its own ${ENGINE_NAME[o.engine]}) into ${t.db.name} on ${t.server.label}, replacing what's there. Orca takes a snapshot of ${t.db.name} first, so you can restore it.${o.running ? "" : ` ${o.container} is stopped: Orca starts it for the copy and stops it again.`}`,
+      message: `Copies ${o.database ?? "the database"} from ${o.container} (its own ${ENGINE_NAME[o.engine]}) into ${tx1.db.name} on ${tx1.server.label}, replacing what's there. Orca takes a snapshot of ${tx1.db.name} first, so you can restore it.${o.running ? "" : ` ${o.container} is stopped: Orca starts it for the copy and stops it again.`}`,
       confirmLabel: "Import data",
     });
     if (!ok) return;
     await run(`import:${o.container}`, async () => {
-      const r = await databasesApi.import(t.server.id, t.db.name, o.container);
-      showToast(`Copied ${r.from} into ${r.database} (${bytes(r.bytes)})`, "success");
+      const r = await databasesApi.import(tx1.server.id, tx1.db.name, o.container);
+      showToast(t("Copied {value1} into {value2} ({value3})", { value1: r.from, value2: r.database, value3: bytes(r.bytes) }), "success");
       await refetchOwn();
-    }, `${o.project} now has its data on ${t.server.label}`);
+    }, `${o.project} now has its data on ${tx1.server.label}`);
   };
 
   const needsAny = () => (data()?.projects.length ?? 0) > 0;
@@ -138,9 +139,9 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
     <div class="db-page">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Databases</h1>
+          <h1 class="page-title">{t("Databases")}</h1>
           <div class="dev-subtitle">
-            A database and a user of its own for each project that requires one.{" "}
+            {t("A database and a user of its own for each project that requires one.")}{" "}
             <HelpLink path="/docs/databases/" />
           </div>
         </div>
@@ -149,17 +150,17 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
       <Show when={loadError()}>
         {(err) => (
           <div class="card" style={{ "max-width": "800px", "margin-bottom": "16px", "border-color": "rgba(248,81,73,0.4)" }}>
-            <div style={{ color: "#f85149", "font-weight": "600", "font-size": "14px", "margin-bottom": "6px" }}>Databases could not load</div>
+            <div style={{ color: "#f85149", "font-weight": "600", "font-size": "14px", "margin-bottom": "6px" }}>{t("Databases could not load")}</div>
             <div style={{ color: "#c9d1d9", "font-size": "13px" }}>{err()}</div>
-            <button class="btn btn-sm" style={{ "margin-top": "10px" }} disabled={data.loading} onClick={() => void refetch()}>Try again</button>
+            <button class="btn btn-sm" style={{ "margin-top": "10px" }} disabled={data.loading} onClick={() => void refetch()}>{t("Try again")}</button>
           </div>
         )}
       </Show>
-      <Show when={data() !== undefined} fallback={<div class="db-muted">Loading…</div>}>
+      <Show when={data() !== undefined} fallback={<div class="db-muted">{t("Loading…")}</div>}>
         <Show when={needsAny() || serversAny()} fallback={<Show when={data()}><GetStarted /></Show>}>
           {/* What each project needs, and where it comes from */}
           <Show when={needsAny()}>
-            <div class="db-section-title">Projects</div>
+            <div class="db-section-title">{t("Projects")}</div>
             <div class="db-needs">
               <For each={data()!.projects}>
                 {(p) => (
@@ -178,8 +179,8 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                               {ENGINE_NAME[r.engine!]}{r.version ? ` ${r.version}` : ""}
                               {" → "}
                               <Show when={r.source?.kind !== "own"} fallback={<>{r.from} <span class="db-muted">({r.source?.why})</span></>}>
-                                <b class="mono">{r.database}</b> on {r.from}
-                                <Show when={r.replaces}>{(svc) => <span class="db-muted">, instead of its own {svc()}</span>}</Show>
+                                <b class="mono">{r.database}</b> {t("on")} {r.from}
+                                <Show when={r.replaces}>{(svc) => <span class="db-muted">{t(", instead of its own")} {svc()}</span>}</Show>
                               </Show>
                             </span>
                           </Show>
@@ -193,8 +194,8 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
           </Show>
 
           {/* The servers, and the databases on each */}
-          <div class="db-section-title">Servers</div>
-          <Show when={serversAny()} fallback={<div class="db-muted db-pad">None yet: one starts the first time a project needs it.</div>}>
+          <div class="db-section-title">{t("Servers")}</div>
+          <Show when={serversAny()} fallback={<div class="db-muted db-pad">{t("None yet: one starts the first time a project needs it.")}</div>}>
             <For each={data()!.servers}>
               {(s) => (
                 <div class="db-server">
@@ -207,28 +208,28 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                       </div>
                       <div class="db-muted">
                         <span class={`app-dot ${s.running ? "running" : ""}`} /> {s.running ? "Running" : "Stopped"}
-                        <Show when={s.container}>{(c) => <> · <span class="mono">{c()}</span> inside containers</>}</Show>
-                        <Show when={s.port}>{(p) => <> · <span class="mono">localhost:{p()}</span> from this computer</>}</Show>
+                        <Show when={s.container}>{(c) => <> · <span class="mono">{c()}</span> {t("inside containers")}</>}</Show>
+                        <Show when={s.port}>{(p) => <> · <span class="mono">{t("localhost:")}{p()}</span> {t("from this computer")}</>}</Show>
                       </div>
                     </div>
                     <div class="db-server-actions">
                       <Show when={adminTool(s)}>
-                        {(t) => <button class="btn btn-sm" onClick={() => void openUrl(t().url)}>Open {t().title} ↗</button>}
+                        {(tx2) => <button class="btn btn-sm" onClick={() => void openUrl(tx2().url)}>{t("Open")} {t(tx2().title)} ↗</button>}
                       </Show>
                       <Show when={s.source === "orca"}>
                         <Show when={s.running} fallback={
-                          <button class="btn btn-sm btn-primary" disabled={busy() === s.id} onClick={() => void run(s.id, () => databasesApi.start(s.id), `${ENGINE_NAME[s.engine]} started`)}>Start</button>
+                          <button class="btn btn-sm btn-primary" disabled={busy() === s.id} onClick={() => void run(s.id, () => databasesApi.start(s.id), `${ENGINE_NAME[s.engine]} started`)}>{t("Start")}</button>
                         }>
-                          <button class="btn btn-sm" disabled={busy() === s.id} title="Projects using it lose their database until it starts again"
-                            onClick={() => void run(s.id, () => databasesApi.stop(s.id), `${ENGINE_NAME[s.engine]} stopped`)}>Stop</button>
+                          <button class="btn btn-sm" disabled={busy() === s.id} title={t("Projects using it lose their database until it starts again")}
+                            onClick={() => void run(s.id, () => databasesApi.stop(s.id), `${ENGINE_NAME[s.engine]} stopped`)}>{t("Stop")}</button>
                         </Show>
                       </Show>
                     </div>
                   </div>
-                  <Show when={s.databases.length > 0} fallback={<div class="db-muted db-pad">No databases on it yet.</div>}>
+                  <Show when={s.databases.length > 0} fallback={<div class="db-muted db-pad">{t("No databases on it yet.")}</div>}>
                     <table class="table db-table">
                       <thead>
-                        <tr><th>Database</th><th>Project</th><th>User</th><th style={{ "text-align": "right" }}>Size</th><th style={{ "text-align": "right" }}>Actions</th></tr>
+                        <tr><th>{t("Database")}</th><th>{t("Project")}</th><th>{t("User")}</th><th style={{ "text-align": "right" }}>{t("Size")}</th><th style={{ "text-align": "right" }}>{t("Actions")}</th></tr>
                       </thead>
                       <tbody>
                         <For each={s.databases}>
@@ -236,19 +237,19 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                             <tr>
                               <td class="mono">{d.name}</td>
                               <td>
-                                <Show when={d.project} fallback={<span class="db-muted" title="Not made by Orca for a project">—</span>}>
+                                <Show when={d.project} fallback={<span class="db-muted" title={t("Not made by Orca for a project")}>—</span>}>
                                   <button class="btn-link" onClick={() => props.onNavigate?.(`stack:${d.project}`)}>{d.project}</button>
                                 </Show>
                               </td>
                               <td class="mono db-muted">{d.user ?? "—"}</td>
                               <td class="mono" style={{ "text-align": "right" }}>{bytes(d.size)}</td>
                               <td style={{ "text-align": "right", "white-space": "nowrap" }}>
-                                <button class="btn btn-sm" disabled={!s.running} onClick={() => void connect(s, d)}>Connect</button>
+                                <button class="btn btn-sm" disabled={!s.running} onClick={() => void connect(s, d)}>{t("Connect")}</button>
                                 <button class="btn btn-sm" disabled={!s.running || !!busy()} onClick={() => void snapshot(s, d)}>
                                   {busy() === `snap:${s.id}/${d.name}` ? <Spinner size={11} /> : "Snapshot"}
                                 </button>
                                 <button class="btn btn-sm" onClick={() => setSnapshotsFor({ serverId: s.id, dbName: d.name })}>
-                                  Restore{d.snapshots ? ` (${d.snapshots})` : ""}
+                                  {t("Restore")}{d.snapshots ? ` (${d.snapshots})` : ""}
                                 </button>
                                 <Show when={d.project}>
                                   <button class="btn btn-sm btn-danger-outline" disabled={!s.running || !!busy()} onClick={() => void reset(s, d)}>
@@ -269,7 +270,7 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
 
           {/* Projects' own database containers: what a move onto shared servers starts from */}
           <Show when={(own() ?? []).length > 0}>
-            <div class="db-section-title">Projects' own database containers</div>
+            <div class="db-section-title">{t("Projects' own database containers")}</div>
             <div class="db-own">
               <For each={own()}>
                 {(o) => (
@@ -281,19 +282,19 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
                       </div>
                       <div class="db-muted">
                         <span class="mono">{o.container}</span> · {o.running ? "running" : "stopped"}
-                        <Show when={o.replaced && o.now_from}>{(f) => <> · its data now lives on {f()}</>}</Show>
+                        <Show when={o.replaced && o.now_from}>{(f) => <> {t("· its data now lives on")} {f()}</>}</Show>
                       </div>
                     </div>
                     <Show when={o.replaced && targetOf(o)} fallback={
                       <Show when={!o.required}>
                         <span class="db-own-hint">
-                          Not shared yet: <HelpLink path="/docs/databases/#move-a-project-onto-a-shared-server">How to move it</HelpLink>
+                          {t("Not shared yet:")} <HelpLink path="/docs/databases/#move-a-project-onto-a-shared-server">{t("How to move it")}</HelpLink>
                         </span>
                       </Show>
                     }>
-                      {(t) => (
-                        <button class="btn btn-sm btn-primary" disabled={!!busy()} title={`Copy its data into ${t().db.name} on ${t().server.label}`} onClick={() => void importInto(o)}>
-                          {busy() === `import:${o.container}` ? <Spinner size={11} /> : `Import into ${t().db.name}`}
+                      {(tx3) => (
+                        <button class="btn btn-sm btn-primary" disabled={!!busy()} title={`Copy its data into ${tx3().db.name} on ${tx3().server.label}`} onClick={() => void importInto(o)}>
+                          {busy() === `import:${o.container}` ? <Spinner size={11} /> : `Import into ${tx3().db.name}`}
                         </button>
                       )}
                     </Show>
@@ -304,7 +305,7 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
           </Show>
 
           <details class="db-howto">
-            <summary>Give another project a database</summary>
+            <summary>{t("Give another project a database")}</summary>
             <HowTo />
           </details>
         </Show>
@@ -314,7 +315,7 @@ export default function DatabasesPage(props: { onNavigate?: (target: string) => 
         {(c) => <ConnectionDialog {...c()} onClose={() => setConnection(null)} />}
       </Show>
       <Show when={snapshotsTarget()}>
-        {(t) => <SnapshotsDialog server={t().server} db={t().db} onClose={() => { setSnapshotsFor(null); void refetch(); }} />}
+        {(tx4) => <SnapshotsDialog server={tx4().server} db={tx4().db} onClose={() => { setSnapshotsFor(null); void refetch(); }} />}
       </Show>
     </div>
   );
@@ -329,11 +330,9 @@ function GetStarted() {
           <ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" />
         </svg>
       </div>
-      <h2>No project requires a database yet</h2>
+      <h2>{t("No project requires a database yet")}</h2>
       <p>
-        Instead of each project running its own database container, a project can say what it needs, and Orca gives it a database
-        and a user of its own: on your team's shared server when the workspace has one, otherwise on one Orca runs.
-      </p>
+        {t("Instead of each project running its own database container, a project can say what it needs, and Orca gives it a database and a user of its own: on your team's shared server when the workspace has one, otherwise on one Orca runs.")}</p>
       <HowTo />
     </div>
   );
@@ -343,19 +342,19 @@ function HowTo() {
   return (
     <div class="db-howto-body">
       <ol class="db-steps">
-        <li>Add this to the project's <span class="mono">orca.yaml</span>:</li>
+        <li>{t("Add this to the project's")} <span class="mono">{t("orca.yaml")}</span>:</li>
       </ol>
       <div class="db-snippet">
         <pre class="mono">{REQUIRE_SNIPPET}</pre>
-        <CopyButton text={REQUIRE_SNIPPET} label="Copy" />
+        <CopyButton text={REQUIRE_SNIPPET} label={t("Copy")} />
       </div>
       <ol class="db-steps" start={2}>
-        <li>Start the project. Orca creates its database and user, writes the connection into its <span class="mono">.env</span>, and, with <span class="mono">replaces</span>, leaves its own database container out.</li>
-        <li>Its database shows up here, to connect to, snapshot, restore or reset.</li>
+        <li>{t("Start the project. Orca creates its database and user, writes the connection into its")} <span class="mono">{t(".env")}</span>{t(", and, with")} <span class="mono">{t("replaces")}</span>{t(", leaves its own database container out.")}</li>
+        <li>{t("Its database shows up here, to connect to, snapshot, restore or reset.")}</li>
       </ol>
       <p class="db-muted">
-        Teams can share one server per engine through their workspace's <span class="mono">databases:</span> section.{" "}
-        <HelpLink path="/docs/databases/#shared-servers-in-a-workspace">How</HelpLink>
+        {t("Teams can share one server per engine through their workspace's")} <span class="mono">{t("databases:")}</span> {t("section.")}{" "}
+        <HelpLink path="/docs/databases/#shared-servers-in-a-workspace">{t("How")}</HelpLink>
       </p>
     </div>
   );
@@ -365,7 +364,7 @@ function Field(props: { label: string; value: string; secret?: boolean }) {
   const [shown, setShown] = createSignal(!props.secret);
   return (
     <div class="db-field">
-      <span class="db-field-label">{props.label}</span>
+      <span class="db-field-label">{t(props.label)}</span>
       <span class="mono db-field-value" title={shown() ? props.value : undefined}>{shown() ? props.value : "••••••••••••"}</span>
       <Show when={props.secret}>
         <button class="btn btn-sm" onClick={() => setShown(!shown())}>{shown() ? "Hide" : "Show"}</button>
@@ -381,22 +380,22 @@ function ConnectionDialog(props: { server: DatabaseServer; db: DatabaseInfo; inf
     <div class="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) props.onClose(); }}>
       <div class="modal-dialog db-dialog">
         <div class="modal-header">
-          <h2 class="modal-title">Connect to {props.db.name}</h2>
+          <h2 class="modal-title">{t("Connect to")} {props.db.name}</h2>
           <button class="modal-close" onClick={props.onClose}>×</button>
         </div>
         <div class="modal-body">
           <div class="db-fields">
-            <Show when={i().host_port}>{(p) => <Field label="From this computer" value={`127.0.0.1:${p()}`} />}</Show>
-            <Show when={props.server.container}>{(c) => <Field label="From containers" value={`${c()}:${props.server.engine === "postgres" ? 5432 : 3306}`} />}</Show>
-            <Field label="Database" value={i().database} />
-            <Show when={i().user}>{(u) => <Field label="User" value={u()} />}</Show>
-            <Show when={i().password}>{(p) => <Field label="Password" value={p()} secret />}</Show>
+            <Show when={i().host_port}>{(p) => <Field label={t("From this computer")} value={`127.0.0.1:${p()}`} />}</Show>
+            <Show when={props.server.container}>{(c) => <Field label={t("From containers")} value={`${c()}:${props.server.engine === "postgres" ? 5432 : 3306}`} />}</Show>
+            <Field label={t("Database")} value={i().database} />
+            <Show when={i().user}>{(u) => <Field label={t("User")} value={u()} />}</Show>
+            <Show when={i().password}>{(p) => <Field label={t("Password")} value={p()} secret />}</Show>
           </div>
           <Show when={i().outside}>
-            {(u) => <div class="db-url"><span class="db-muted">For database tools (TablePlus, DBeaver, DataGrip):</span><Field label="URL" value={u()} secret /></div>}
+            {(u) => <div class="db-url"><span class="db-muted">{t("For database tools (TablePlus, DBeaver, DataGrip):")}</span><Field label={t("URL")} value={u()} secret /></div>}
           </Show>
           <Show when={i().inside}>
-            {(u) => <div class="db-url"><span class="db-muted">For the project's containers (already in its <span class="mono">.env</span>):</span><Field label="URL" value={u()} secret /></div>}
+            {(u) => <div class="db-url"><span class="db-muted">{t("For the project's containers (already in its")} <span class="mono">{t(".env")}</span>):</span><Field label={t("URL")} value={u()} secret /></div>}
           </Show>
         </div>
       </div>
@@ -432,15 +431,15 @@ function SnapshotsDialog(props: { server: DatabaseServer; db: DatabaseInfo; onCl
     <div class="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy()) props.onClose(); }}>
       <div class="modal-dialog db-dialog">
         <div class="modal-header">
-          <h2 class="modal-title">Snapshots of {props.db.name}</h2>
+          <h2 class="modal-title">{t("Snapshots of")} {props.db.name}</h2>
           <button class="modal-close" disabled={busy()} onClick={() => { if (!busy()) props.onClose(); }}>×</button>
         </div>
         <div class="modal-body">
           <form class="db-snap-new" onSubmit={(e) => { e.preventDefault(); void act(() => databasesApi.snapshot(props.server.id, props.db.name, label()), "Snapshot saved").then(() => setLabel("")); }}>
-            <input class="form-input" placeholder="Label, such as before-migration (optional)" value={label()} onInput={(e) => setLabel(e.currentTarget.value)} />
-            <button class="btn btn-primary" type="submit" disabled={busy() || !props.server.running}>Take snapshot</button>
+            <input class="form-input" placeholder={t("Label, such as before-migration (optional)")} value={label()} onInput={(e) => setLabel(e.currentTarget.value)} />
+            <button class="btn btn-primary" type="submit" disabled={busy() || !props.server.running}>{t("Take snapshot")}</button>
           </form>
-          <Show when={(list() ?? []).length > 0} fallback={<div class="db-muted db-pad">No snapshots yet. They're compressed SQL dumps kept on this computer.</div>}>
+          <Show when={(list() ?? []).length > 0} fallback={<div class="db-muted db-pad">{t("No snapshots yet. They're compressed SQL dumps kept on this computer.")}</div>}>
             <div class="db-snaps">
               <For each={list()}>
                 {(s) => (
@@ -449,8 +448,8 @@ function SnapshotsDialog(props: { server: DatabaseServer; db: DatabaseInfo; onCl
                       <div>{new Date(s.at * 1000).toLocaleString()}</div>
                       <div class="db-muted mono">{s.name} · {bytes(s.bytes)}</div>
                     </div>
-                    <button class="btn btn-sm btn-primary" disabled={busy() || !props.server.running} onClick={() => void restore(s)}>Restore</button>
-                    <button class="btn btn-sm" disabled={busy()} onClick={() => void remove(s)}>Delete</button>
+                    <button class="btn btn-sm btn-primary" disabled={busy() || !props.server.running} onClick={() => void restore(s)}>{t("Restore")}</button>
+                    <button class="btn btn-sm" disabled={busy()} onClick={() => void remove(s)}>{t("Delete")}</button>
                   </div>
                 )}
               </For>

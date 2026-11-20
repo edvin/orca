@@ -1,9 +1,12 @@
 name: Package orca-daemon
 
+# Tag pushes cut a release; workflow_dispatch builds the same artifacts on demand
+# so a binary can be produced without inventing a tag.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,18 +14,32 @@ permissions:
 jobs:
   build-deb:
     strategy:
+      fail-fast: false
       matrix:
-        # Pinned, not ubuntu-latest: the daemon can need a glibc as new as
-        # the image it's built on, and apt upgrades servers to it.
+        # Static musl, not glibc.
+        #
+        # `x86_64-unknown-linux-gnu` links against the builder's libc, so a binary
+        # built here demands the builder image's glibc at runtime — on this runner
+        # that is 2.39, which fails on every RHEL/CentOS 8-era host (glibc 2.28)
+        # and older with `version 'GLIBC_2.29' not found`. Pinning the runner only
+        # moves the floor; it does not remove it.
+        #
+        # The musl targets link libc statically, so the result runs on any Linux
+        # regardless of the host's glibc.
+        #
+        # aarch64 uses the native arm runner rather than cross-compiling: musl-tools
+        # only provides a musl-gcc for the host architecture, so cross-linking
+        # aarch64 musl from an x86_64 box would need a separate toolchain and
+        # sysroot.
         include:
           - arch: x86_64
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             deb_arch: amd64
             runner: ubuntu-24.04
           - arch: aarch64
-            target: aarch64-unknown-linux-gnu
+            target: aarch64-unknown-linux-musl
             deb_arch: arm64
-            runner: ubuntu-24.04
+            runner: ubuntu-24.04-arm
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -33,21 +50,62 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools
-        if: matrix.arch == 'aarch64'
+      - name: Install musl toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y musl-tools
 
-      - name: Build orca-daemon
+      - name: Build orca-daemon (static musl)
         run: |
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-          fi
-          cargo build --release --target ${{ matrix.target }} --bin orca-daemon --bin orca
+          set -euo pipefail
+          TARGET="${{ matrix.target }}"
+          # cargo looks for CARGO_TARGET_<TRIPLE>_LINKER; the cc crate looks for
+          # CC_<triple> with dashes as underscores.
+          UPPER=$(echo "$TARGET" | tr '[:lower:]-' '[:upper:]_')
+          LOWER=$(echo "$TARGET" | tr '-' '_')
+          export "CARGO_TARGET_${UPPER}_LINKER=musl-gcc"
+          export "CC_${LOWER}=musl-gcc"
+          export "AR_${LOWER}=ar"
+
+          cargo build --release --target "$TARGET" --bin orca-daemon --bin orca
         env:
           CARGO_TERM_COLOR: always
+
+      - name: Assert statically linked
+        run: |
+          set -uo pipefail
+          TARGET="${{ matrix.target }}"
+          fail=0
+          for bin in orca-daemon orca; do
+            BIN="target/${TARGET}/release/${bin}"
+            echo "--- $BIN ---"
+            file "$BIN"
+
+            # `static-pie linked` is what x86_64-musl produces by default; aarch64
+            # produces `statically linked`. Both are correct — only an actual
+            # dynamic link is a failure.
+            if file "$BIN" | grep -q "dynamically linked"; then
+              echo "::error::$BIN is dynamically linked"
+              fail=1
+              continue
+            fi
+            if ! file "$BIN" | grep -Eq "statically linked|static-pie linked"; then
+              echo "::error::$BIN does not report as static"
+              fail=1
+            fi
+            # A dynamic ELF carries an interpreter and a NEEDED list; a static one
+            # has neither. Checking both catches a link that reports as static but
+            # still pulls in a shared libc.
+            if readelf -l "$BIN" | grep -q INTERP; then
+              echo "::error::$BIN has a PT_INTERP segment"
+              fail=1
+            fi
+            if readelf -d "$BIN" 2>/dev/null | grep -q NEEDED; then
+              echo "::error::$BIN has DT_NEEDED entries"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
 
       - name: Extract version
         id: version
@@ -65,7 +123,6 @@ jobs:
           mkdir -p "$PKG_DIR/etc/systemd/system"
           mkdir -p "$PKG_DIR/etc/orca"
 
-          # Control file
           cat > "$PKG_DIR/DEBIAN/control" << EOF
           Package: orca-daemon
           Version: ${VERSION}
@@ -80,38 +137,69 @@ jobs:
           Depends: docker.io | docker-ce | podman
           EOF
 
-          # Post-install script
+          # Post-install script.
+          #
+          # The config is generated BY THE DAEMON, not hand-written here. OrcaConfig
+          # has five required fields with no serde default (data_dir,
+          # default_machine, start_on_login, show_tray_icon, telemetry) and `load`
+          # deliberately fails loudly on an unparseable file rather than falling
+          # back to defaults, so a hand-written partial config leaves the service
+          # unable to start at all:
+          #
+          #   {"api_token": "<hex>"}  ->  missing field `data_dir`
+          #
+          # One run in a scratch HOME writes a complete config; the token is
+          # persisted before the listener opens, so the file is ready in
+          # milliseconds and survives the daemon exiting immediately after.
           cat > "$PKG_DIR/DEBIAN/postinst" << 'EOF'
           #!/bin/bash
           set -e
 
-          # Generate API token if not exists
           if [ ! -f /etc/orca/config.json ]; then
-              TOKEN=$(openssl rand -hex 32)
-              echo "{\"api_token\": \"$TOKEN\"}" > /etc/orca/config.json
-              chmod 600 /etc/orca/config.json
-              echo "Orca: Generated API token in /etc/orca/config.json"
+              mkdir -p /etc/orca
+              TMPHOME=$(mktemp -d)
+              HOME="$TMPHOME" \
+              XDG_CONFIG_HOME="$TMPHOME/.config" \
+              XDG_DATA_HOME="$TMPHOME/.local/share" \
+                  /usr/local/bin/orca-daemon --bind 127.0.0.1 --port 19477 >/dev/null 2>&1 &
+              DAEMON_PID=$!
+              for _ in $(seq 1 100); do
+                  [ -s "$TMPHOME/.config/orca/config.json" ] && break
+                  sleep 0.1
+              done
+              kill "$DAEMON_PID" 2>/dev/null || true
+              wait "$DAEMON_PID" 2>/dev/null || true
+
+              if [ -s "$TMPHOME/.config/orca/config.json" ]; then
+                  install -m 600 "$TMPHOME/.config/orca/config.json" /etc/orca/config.json
+                  echo "Orca: generated /etc/orca/config.json"
+              else
+                  echo "Orca: WARNING: could not generate /etc/orca/config.json." >&2
+                  echo "Orca: run '/usr/local/bin/orca-daemon --bind 0.0.0.0' once by hand," >&2
+                  echo "Orca: then 'systemctl restart orca-daemon'." >&2
+              fi
+              rm -rf "$TMPHOME"
           fi
 
-          # Enable and start/restart service
           systemctl daemon-reload
           systemctl enable orca-daemon
           systemctl restart orca-daemon || systemctl start orca-daemon || true
 
-          # Print connection info
-          TOKEN=$(grep -o '"api_token"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/orca/config.json | cut -d'"' -f4)
+          # `|| true`: without it a missing config aborts the install here with a
+          # pipeline-under-`set -e` failure that says nothing useful.
+          TOKEN=$(grep -o '"api_token"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/orca/config.json 2>/dev/null | cut -d'"' -f4 || true)
           IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_IP")
           echo ""
           echo "=== Orca Daemon Ready ==="
           echo "URL:   http://$IP:9477/api/v1"
-          echo "Token: $TOKEN"
+          echo "Token: ${TOKEN:-<read /etc/orca/config.json>}"
           echo ""
-          echo "Add this host in Orca Desktop → Settings → Remote Hosts"
+          echo "In Orca Desktop, adding the host is NOT enough. Pick it in the host"
+          echo "selector at the top-left of the window, which shows \"Local\" by default."
           echo "For production: set up TLS with a reverse proxy (Caddy/nginx)"
           EOF
           chmod 755 "$PKG_DIR/DEBIAN/postinst"
 
-          # Pre-remove script
           cat > "$PKG_DIR/DEBIAN/prerm" << 'EOF'
           #!/bin/bash
           set -e
@@ -120,38 +208,53 @@ jobs:
           EOF
           chmod 755 "$PKG_DIR/DEBIAN/prerm"
 
-          # Binaries
           cp "target/${{ matrix.target }}/release/orca-daemon" "$PKG_DIR/usr/local/bin/"
           cp "target/${{ matrix.target }}/release/orca" "$PKG_DIR/usr/local/bin/"
           chmod 755 "$PKG_DIR/usr/local/bin/orca-daemon"
           chmod 755 "$PKG_DIR/usr/local/bin/orca"
 
-          # Systemd service
           cp deploy/orca-daemon.service "$PKG_DIR/etc/systemd/system/"
 
-          # Build the .deb
           dpkg-deb --build "$PKG_DIR"
-
           echo "Built: ${PKG_DIR}.deb"
 
+      - name: Stage binaries
+        run: |
+          set -euo pipefail
+          STAGE="dist/${{ matrix.arch }}"
+          mkdir -p "$STAGE"
+          cp "target/${{ matrix.target }}/release/orca-daemon" "$STAGE/orca-daemon-linux-${{ matrix.arch }}-musl"
+          cp "target/${{ matrix.target }}/release/orca" "$STAGE/orca-linux-${{ matrix.arch }}-musl"
+          cp "orca-daemon_${{ steps.version.outputs.version }}_${{ matrix.deb_arch }}.deb" "$STAGE/"
+          ( cd "$STAGE" && sha256sum ./* > SHA256SUMS.txt )
+          ls -la "$STAGE"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: orca-daemon-linux-${{ matrix.arch }}-musl
+          path: dist/${{ matrix.arch }}/*
+
       - name: Upload .deb to Cloudsmith
+        if: env.CLOUDSMITH_API_KEY != ''
         env:
           CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
         run: |
           pip install cloudsmith-cli
           VERSION=${{ steps.version.outputs.version }}
           DEB_FILE="orca-daemon_${VERSION}_${{ matrix.deb_arch }}.deb"
-
           cloudsmith push deb edvin/orca/any-distro/any-version "$DEB_FILE" \
             --api-key "$CLOUDSMITH_API_KEY" \
             --republish
 
-      - name: Upload standalone binary to release
+      - name: Attach binaries to Release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          BINARY="target/${{ matrix.target }}/release/orca-daemon"
-          RELEASE_NAME="orca-daemon-linux-${{ matrix.arch }}"
-          cp "$BINARY" "$RELEASE_NAME"
-          gh release upload "v${VERSION}" "$RELEASE_NAME" --clobber || true
+          gh release upload "v${VERSION}" \
+            "dist/${{ matrix.arch }}/orca-daemon-linux-${{ matrix.arch }}-musl" \
+            "dist/${{ matrix.arch }}/orca-linux-${{ matrix.arch }}-musl" \
+            "dist/${{ matrix.arch }}/SHA256SUMS.txt" \
+            --clobber || true

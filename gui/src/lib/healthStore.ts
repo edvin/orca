@@ -18,10 +18,10 @@ let inflight: Promise<void> | null = null;
 
 function fetchHealth(refresh: boolean): Promise<void> {
   return new Promise<SystemHealth>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`system_health timed out after ${TIMEOUT_MS / 1000}s`)), TIMEOUT_MS);
+    const tx = setTimeout(() => reject(new Error(`system_health timed out after ${TIMEOUT_MS / 1000}s`)), TIMEOUT_MS);
     invoke("system_health", { refresh })
-      .then((v) => { clearTimeout(t); resolve(v as SystemHealth); })
-      .catch((e) => { clearTimeout(t); reject(e); });
+      .then((v) => { clearTimeout(tx); resolve(v as SystemHealth); })
+      .catch((e) => { clearTimeout(tx); reject(e); });
   })
     .then((h) => batch(() => { setHealth(h); setHealthError(null); }))
     .catch((e) => { setHealthError(String(e) || "system_health failed"); });

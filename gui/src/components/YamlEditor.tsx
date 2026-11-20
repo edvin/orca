@@ -6,6 +6,7 @@ import { yaml } from "@codemirror/lang-yaml";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, HighlightStyle } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import { t } from "../lib/i18n";
 
 // Tokyo Night theme for CodeMirror 6
 const tokyoNightTheme = EditorView.theme({
@@ -229,7 +230,7 @@ export default function YamlEditor(props: YamlEditorProps) {
               {props.title || "YAML Editor"}
             </span>
             <Show when={modified()}>
-              <span style={{ "font-size": "11px", color: "#e0af68" }}>(modified)</span>
+              <span style={{ "font-size": "11px", color: "#e0af68" }}>{t("(modified)")}</span>
             </Show>
           </div>
           <div style={{ display: "flex", gap: "6px" }}>
@@ -245,8 +246,7 @@ export default function YamlEditor(props: YamlEditorProps) {
             </Show>
             <Show when={props.onClose}>
               <button class="btn btn-sm" onClick={() => props.onClose?.()} style={{ "font-size": "11px" }}>
-                Close
-              </button>
+                {t("Close")}</button>
             </Show>
           </div>
         </div>
@@ -256,7 +256,7 @@ export default function YamlEditor(props: YamlEditorProps) {
           padding: "16px", color: "#f7768e", background: "rgba(247,118,142,0.08)",
           border: "1px solid rgba(247,118,142,0.2)", "border-radius": "8px", margin: "12px",
         }}>
-          <strong>Editor failed to load:</strong> {loadError()}
+          <strong>{t("Editor failed to load:")}</strong> {loadError()}
           <pre style={{
             "margin-top": "12px", background: "#1a1b26", padding: "12px", "border-radius": "6px",
             "font-family": "'JetBrains Mono NF', monospace", "font-size": "12px",

@@ -6,6 +6,7 @@ import { DATA_MODE_LABEL, STATUS_META, ago, instanceUrls, tildify } from "../../
 import type { DevInstance, DevJob } from "../../lib/dev";
 import { JobProgress, StatusDot } from "./DevBits";
 import { copyToClipboard } from "../../lib/clipboard";
+import { t } from "../../lib/i18n";
 
 interface Props {
   inst: DevInstance;
@@ -61,7 +62,7 @@ export default function InstanceCard(props: Props) {
             <StatusDot color={busy() ? "#58a6ff" : meta().color} pulse={busy()} />
             {props.inst.name}
             <Show when={props.inst.is_main}>
-              <span class="dev-chip" style={{ "font-size": "10px", padding: "1px 7px" }}>main checkout</span>
+              <span class="dev-chip" style={{ "font-size": "10px", padding: "1px 7px" }}>{t("main checkout")}</span>
             </Show>
             <For each={props.inst.profiles ?? []}>
               {(p) => <span class="profile-tag" title={`Runs the ${p} profile`}>+{p}</span>}
@@ -73,15 +74,14 @@ export default function InstanceCard(props: Props) {
               {props.inst.branch ?? `detached ${props.inst.head ?? ""}`}
             </span>
             <Show when={(props.inst.ahead ?? 0) > 0}>
-              <span>{props.inst.ahead} ahead</span>
+              <span>{props.inst.ahead} {t("ahead")}</span>
             </Show>
             <Show when={props.inst.dirty}>
-              <span style={{ color: "#d29922" }}>uncommitted changes</span>
+              <span style={{ color: "#d29922" }}>{t("uncommitted changes")}</span>
             </Show>
             <Show when={props.inst.upstream_gone}>
-              <span style={{ color: "#a371f7" }} title="The branch was deleted on the remote, usually because its pull request was merged">
-                remote branch deleted
-              </span>
+              <span style={{ color: "#a371f7" }} title={t("The branch was deleted on the remote, usually because its pull request was merged")}>
+                {t("remote branch deleted")}</span>
             </Show>
           </div>
           <Show when={Object.keys(props.inst.data_modes ?? {}).length > 0}>
@@ -141,14 +141,14 @@ export default function InstanceCard(props: Props) {
               <a
                 class={`dev-link dev-link-port ${live() ? "" : "dev-link-dim"}`}
                 href="#"
-                title="Copy address"
+                title={t("Copy address")}
                 onClick={(e) => {
                   e.preventDefault();
                   copyToClipboard(`localhost:${p.host_port}`);
                 }}
               >
                 <PlugIcon />
-                <span class="dev-link-text">localhost:{p.host_port}</span>
+                <span class="dev-link-text">{t("localhost:")}{p.host_port}</span>
                 <span class="dev-link-svc">{p.service} :{p.container_port}</span>
                 <CopyIcon />
               </a>
@@ -169,8 +169,7 @@ export default function InstanceCard(props: Props) {
 
       <Show when={props.inst.status === "orphaned"}>
         <div class="dev-card-hint">
-          The worktree folder is gone. Remove the instance to free its containers, volumes and ports.
-        </div>
+          {t("The worktree folder is gone. Remove the instance to free its containers, volumes and ports.")}</div>
       </Show>
 
       <Show when={props.inst.services.length > 0 && !busy()}>
@@ -189,7 +188,7 @@ export default function InstanceCard(props: Props) {
       <div class="dev-card-footer" onClick={stop}>
         <span class="dev-who">{who()}</span>
         <Show when={props.inst.status === "orphaned"}>
-          <button class="btn btn-sm btn-danger" onClick={props.onRemove}>Remove</button>
+          <button class="btn btn-sm btn-danger" onClick={props.onRemove}>{t("Remove")}</button>
         </Show>
         <Show when={props.inst.status !== "orphaned"}>
           <Show
@@ -200,7 +199,7 @@ export default function InstanceCard(props: Props) {
               </button>
             }
           >
-            <button class="btn btn-sm" disabled={busy()} onClick={props.onStop}>Stop</button>
+            <button class="btn btn-sm" disabled={busy()} onClick={props.onStop}>{t("Stop")}</button>
           </Show>
         </Show>
       </div>

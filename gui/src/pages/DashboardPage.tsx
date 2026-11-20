@@ -19,6 +19,7 @@ import AppsOverview from "../components/AppsOverview";
 import { workspaceApi, type WorkspaceStatus } from "../lib/workspace";
 import { openFolderDialog } from "../lib/openFolder";
 import LastUpdated from "../components/LastUpdated";
+import { t } from "../lib/i18n";
 
 /** Wrap an invoke call with a timeout (ms). Rejects on timeout. */
 function invokeWithTimeout<T>(cmd: string, args?: Record<string, unknown>, timeoutMs = 10_000): Promise<T> {
@@ -47,8 +48,8 @@ export default function DashboardPage(props: DashboardPageProps) {
   const stacks = stackList.list;
   const [health, setHealth] = createSignal<SystemHealth | null>(null);
   const lastUpdated = () => {
-    const t = containerList.updatedAt();
-    return t ? new Date(t) : null;
+    const tx = containerList.updatedAt();
+    return tx ? new Date(tx) : null;
   };
 
   const [gatewayStatus, setGatewayStatus] = createSignal<GatewayStatus | null>(null);
@@ -227,11 +228,10 @@ export default function DashboardPage(props: DashboardPageProps) {
     <div>
       <div class="page-header">
         <h1 class="page-title">
-          Dashboard
-          <LastUpdated timestamp={lastUpdated()} />
+          {t("Dashboard")}<LastUpdated timestamp={lastUpdated()} />
         </h1>
         <div class="page-actions">
-          <button class="btn btn-primary" onClick={() => openFolderDialog()}>Open folder</button>
+          <button class="btn btn-primary" onClick={() => openFolderDialog()}>{t("Open folder")}</button>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export default function DashboardPage(props: DashboardPageProps) {
       {/* Summary cards — each resolves independently */}
       <div class="dashboard-grid">
         <div class="dashboard-stat-card">
-          <div class="dashboard-stat-label">Containers</div>
+          <div class="dashboard-stat-label">{t("Containers")}</div>
           <Show when={containersState() !== "loading"} fallback={
             <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
           }>
@@ -260,11 +260,10 @@ export default function DashboardPage(props: DashboardPageProps) {
             }>
               <div class="dashboard-stat-value">{containers().length}</div>
               <div class="dashboard-stat-sub">
-                <span style={{ color: "#3fb950" }}>{runningCount()} running</span>
+                <span style={{ color: "#3fb950" }}>{runningCount()} {t("running")}</span>
                 {containers().length - runningCount() > 0 && (
                   <span style={{ color: "#8b949e" }}>
-                    {" / "}{containers().length - runningCount()} stopped
-                  </span>
+                    {" / "}{containers().length - runningCount()} {t("stopped")}</span>
                 )}
               </div>
             </Show>
@@ -272,7 +271,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         </div>
 
         <div class="dashboard-stat-card">
-          <div class="dashboard-stat-label">Images</div>
+          <div class="dashboard-stat-label">{t("Images")}</div>
           <Show when={imagesState() !== "loading"} fallback={
             <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
           }>
@@ -280,13 +279,13 @@ export default function DashboardPage(props: DashboardPageProps) {
               <div class="dashboard-stat-error">{imagesError()}</div>
             }>
               <div class="dashboard-stat-value">{images().length}</div>
-              <div class="dashboard-stat-sub">{formatBytes(totalImageSize())} total</div>
+              <div class="dashboard-stat-sub">{formatBytes(totalImageSize())} {t("total")}</div>
             </Show>
           </Show>
         </div>
 
         <div class="dashboard-stat-card">
-          <div class="dashboard-stat-label">Stacks</div>
+          <div class="dashboard-stat-label">{t("Stacks")}</div>
           <Show when={stacksState() !== "loading"} fallback={
             <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
           }>
@@ -295,20 +294,20 @@ export default function DashboardPage(props: DashboardPageProps) {
             }>
               <div class="dashboard-stat-value">{stacks().length}</div>
               <div class="dashboard-stat-sub">
-                <span style={{ color: "#3fb950" }}>{runningStacks()} running</span>
+                <span style={{ color: "#3fb950" }}>{runningStacks()} {t("running")}</span>
               </div>
             </Show>
           </Show>
         </div>
 
         <div class="dashboard-stat-card">
-          <div class="dashboard-stat-label">System</div>
+          <div class="dashboard-stat-label">{t("System")}</div>
           <Show when={healthState() !== "loading"} fallback={
             <><div class="skeleton-line skeleton-line-short" /><div class="skeleton-line skeleton-line-medium" /></>
           }>
             <Show when={healthState() === "ready" && health()?.system_resources} fallback={
               <Show when={healthState() === "error"} fallback={
-                <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>No data</div>
+                <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>{t("No data")}</div>
               }>
                 <div class="dashboard-stat-error">{healthError()}</div>
               </Show>
@@ -316,11 +315,9 @@ export default function DashboardPage(props: DashboardPageProps) {
               {(res) => (
                 <>
                   <div class="dashboard-stat-value" style={{ "font-size": "20px" }}>
-                    {res().cpu_count} CPUs
-                  </div>
+                    {res().cpu_count} {t("CPUs")}</div>
                   <div class="dashboard-stat-sub">
-                    {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)} RAM
-                  </div>
+                    {formatBytes(res().memory_total_bytes - res().memory_available_bytes)} / {formatBytes(res().memory_total_bytes)} {t("RAM")}</div>
                 </>
               )}
             </Show>
@@ -329,13 +326,12 @@ export default function DashboardPage(props: DashboardPageProps) {
         <Show when={health()?.gpu}>
           {(gpu) => (
             <div class="dashboard-stat-card">
-              <div class="dashboard-stat-label">GPU</div>
+              <div class="dashboard-stat-label">{t("GPU")}</div>
               <div class="dashboard-stat-value" style={{ "font-size": "16px" }}>
                 {gpu().utilization_percent}%
               </div>
               <div class="dashboard-stat-sub">
-                {(gpu().memory_used_mb / 1024).toFixed(1)} / {(gpu().memory_total_mb / 1024).toFixed(1)} GB VRAM
-              </div>
+                {(gpu().memory_used_mb / 1024).toFixed(1)} / {(gpu().memory_total_mb / 1024).toFixed(1)} {t("GB VRAM")}</div>
               <div style={{ "font-size": "10px", color: "#6e7681", "margin-top": "2px" }}>
                 {gpu().name}
               </div>
@@ -344,11 +340,11 @@ export default function DashboardPage(props: DashboardPageProps) {
         </Show>
 
         <Show when={(dbs()?.servers.length ?? 0) > 0 || (dbs()?.projects.length ?? 0) > 0}>
-          <div class="dashboard-stat-card" style={{ cursor: "pointer" }} onClick={() => props.onNavigate?.("databases")} title="Go to Databases">
-            <div class="dashboard-stat-label">Databases</div>
+          <div class="dashboard-stat-card" style={{ cursor: "pointer" }} onClick={() => props.onNavigate?.("databases")} title={t("Go to Databases")}>
+            <div class="dashboard-stat-label">{t("Databases")}</div>
             <div class="dashboard-stat-value">
               {dbs()!.servers.reduce((n, s) => n + s.databases.length, 0)}
-              <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": 400 }}> on {dbs()!.servers.length} server{dbs()!.servers.length === 1 ? "" : "s"}</span>
+              <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": 400 }}> {t("on")} {dbs()!.servers.length} {t("server")}{dbs()!.servers.length === 1 ? "" : "s"}</span>
             </div>
             <div class="dashboard-stat-sub">
               <Show when={dbs()!.projects.some((p) => p.databases.some((d) => d.error))} fallback={
@@ -358,7 +354,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                   return [shared && `${shared} shared by the workspace`, orca && `${orca} run by Orca`].filter(Boolean).join(" · ");
                 })()
               }>
-                <span style={{ color: "#f85149" }}>A project's database can't be provided</span>
+                <span style={{ color: "#f85149" }}>{t("A project's database can't be provided")}</span>
               </Show>
             </div>
           </div>
@@ -368,21 +364,21 @@ export default function DashboardPage(props: DashboardPageProps) {
           class="dashboard-stat-card"
           style={{ cursor: "pointer" }}
           onClick={() => props.onNavigate?.("projects")}
-          title="Go to Worktrees"
+          title={t("Go to Worktrees")}
         >
-          <div class="dashboard-stat-label">Worktree instances</div>
+          <div class="dashboard-stat-label">{t("Worktree instances")}</div>
           <Show
             when={(devProjects()?.length ?? 0) > 0}
             fallback={
               <>
-                <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>No projects</div>
-                <div class="dashboard-stat-sub">Run each git worktree as its own copy of the app</div>
+                <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>{t("No projects")}</div>
+                <div class="dashboard-stat-sub">{t("Run each git worktree as its own copy of the app")}</div>
               </>
             }
           >
             <div class="dashboard-stat-value">
               {devRunning()}
-              <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": 400 }}> / {devTotal()} running</span>
+              <span style={{ "font-size": "13px", color: "#8b949e", "font-weight": 400 }}> / {devTotal()} {t("running")}</span>
             </div>
             <div class="dashboard-stat-sub">
               {(devProjects() ?? [])
@@ -399,9 +395,9 @@ export default function DashboardPage(props: DashboardPageProps) {
           class="dashboard-stat-card"
           style={{ cursor: "pointer" }}
           onClick={() => props.onNavigate?.("gateway")}
-          title="Go to Gateway"
+          title={t("Go to Gateway")}
         >
-          <div class="dashboard-stat-label">Gateway</div>
+          <div class="dashboard-stat-label">{t("Gateway")}</div>
           <Show when={gatewayStatus()} fallback={
             <div class="dashboard-stat-value" style={{ "font-size": "14px", color: "#8b949e" }}>--</div>
           }>
@@ -421,16 +417,15 @@ export default function DashboardPage(props: DashboardPageProps) {
                 </div>
                 <div class="dashboard-stat-sub">
                   <Show when={gw().running} fallback={
-                    <span style={{ color: "#8b949e" }}>Enable for clean hostnames</span>
+                    <span style={{ color: "#8b949e" }}>{t("Enable for clean hostnames")}</span>
                   }>
-                    <span style={{ color: "#3fb950" }}>{gw().routes_active} route{gw().routes_active !== 1 ? "s" : ""}</span>
-                    <span style={{ color: "#8b949e" }}> on *.{gw().domain}</span>
+                    <span style={{ color: "#3fb950" }}>{gw().routes_active} {t("route")}{gw().routes_active !== 1 ? "s" : ""}</span>
+                    <span style={{ color: "#8b949e" }}> {t("on *.")}{gw().domain}</span>
                   </Show>
                 </div>
                 <Show when={gw().running && suggestableCount() > 0}>
                   <div style={{ "font-size": "11px", color: "#58a6ff", "margin-top": "4px" }}>
-                    {suggestableCount()} container{suggestableCount() !== 1 ? "s" : ""} could be exposed
-                  </div>
+                    {suggestableCount()} {t("container")}{suggestableCount() !== 1 ? "s" : ""} {t("could be exposed")}</div>
                 </Show>
               </>
             )}
@@ -443,7 +438,7 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div class="dashboard-chart-card">
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "12px" }}>
-              <span style={{ color: "#8b949e", "font-size": "13px" }}>CPU used by containers</span>
+              <span style={{ color: "#8b949e", "font-size": "13px" }}>{t("CPU used by containers")}</span>
               <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{totalCpu().toFixed(1)}%</span>
             </div>
             <TimeChart
@@ -462,8 +457,7 @@ export default function DashboardPage(props: DashboardPageProps) {
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "12px" }}>
               <span style={{ color: "#8b949e", "font-size": "13px" }}>
-                Memory used by containers
-                <Show when={memoryTotal()}>{(t) => <span style={{ color: "#6e7681" }}> · of {formatBytes(t())}</span>}</Show>
+                {t("Memory used by containers")}<Show when={memoryTotal()}>{(tx1) => <span style={{ color: "#6e7681" }}> {t("· of")} {formatBytes(tx1())}</span>}</Show>
               </span>
               <span style={{ color: "#e6edf3", "font-size": "18px", "font-weight": "600" }}>{formatBytes(totalMemory())}</span>
             </div>
@@ -483,17 +477,17 @@ export default function DashboardPage(props: DashboardPageProps) {
       {/* Top consumers */}
       <div class="consumers-grid">
         <div class="consumer-card">
-          <div class="consumer-title">Top CPU consumers</div>
+          <div class="consumer-title">{t("Top CPU consumers")}</div>
           <Show when={topCpu().length > 0} fallback={
-            <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers. Start a container to see resource usage here.</div>
+            <div style={{ color: "#484f58", "font-size": "12px" }}>{t("No running containers. Start a container to see resource usage here.")}</div>
           }>
             <table class="table" style={{ "font-size": "12px" }}>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Image</th>
-                  <th>CPU</th>
-                  <th style={{ width: "80px" }}>Trend</th>
+                  <th>{t("Name")}</th>
+                  <th>{t("Image")}</th>
+                  <th>{t("CPU")}</th>
+                  <th style={{ width: "80px" }}>{t("Trend")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -526,17 +520,17 @@ export default function DashboardPage(props: DashboardPageProps) {
         </div>
 
         <div class="consumer-card">
-          <div class="consumer-title">Top memory consumers</div>
+          <div class="consumer-title">{t("Top memory consumers")}</div>
           <Show when={topMemory().length > 0} fallback={
-            <div style={{ color: "#484f58", "font-size": "12px" }}>No running containers. Start a container to see resource usage here.</div>
+            <div style={{ color: "#484f58", "font-size": "12px" }}>{t("No running containers. Start a container to see resource usage here.")}</div>
           }>
             <table class="table" style={{ "font-size": "12px" }}>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Image</th>
-                  <th>Memory</th>
-                  <th style={{ width: "80px" }}>Trend</th>
+                  <th>{t("Name")}</th>
+                  <th>{t("Image")}</th>
+                  <th>{t("Memory")}</th>
+                  <th style={{ width: "80px" }}>{t("Trend")}</th>
                 </tr>
               </thead>
               <tbody>

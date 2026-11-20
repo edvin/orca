@@ -9,6 +9,7 @@ import type { GatewayRoute, LandingLink, LandingSettings } from "../../lib/types
 import { showToast } from "../Toast";
 import Dropdown from "../Dropdown";
 import HelpLink from "../HelpLink";
+import { t } from "../../lib/i18n";
 
 interface Props {
   routes: GatewayRoute[];
@@ -77,8 +78,8 @@ function Toggle(props: { on: boolean; onChange: (on: boolean) => void; label: st
   return (
     <div class="settings-row">
       <div class="settings-row-left">
-        <span class="settings-label">{props.label}</span>
-        <span class="settings-description">{props.hint}</span>
+        <span class="settings-label">{t(props.label)}</span>
+        <span class="settings-description">{t(props.hint)}</span>
       </div>
       <div class="settings-toggle" role="switch" aria-checked={props.on} tabIndex={0}
         onClick={() => props.onChange(!props.on)}
@@ -102,10 +103,10 @@ export default function LandingPageTab(props: Props) {
     try {
       const r = await invoke<{ settings: LandingSettings }>("gateway_set_landing", { settings });
       mutate((l) => (l ? { ...l, settings: r.settings } : l));
-      showToast("Landing page updated", "success");
+      showToast(t("Landing page updated"), "success");
       return true;
     } catch (e) {
-      showToast(`Could not save: ${e}`, "error");
+      showToast(t("Could not save: {e}", { e: e }), "error");
       return false;
     } finally {
       setSaving(false);
@@ -123,7 +124,7 @@ export default function LandingPageTab(props: Props) {
       });
       props.onChanged();
     } catch (e) {
-      showToast(`Could not update: ${e}`, "error");
+      showToast(t("Could not update: {e}", { e: e }), "error");
     }
   };
 
@@ -154,7 +155,7 @@ export default function LandingPageTab(props: Props) {
     }
     if (!validCustom(v)) {
       // Keep what was typed, so it can be fixed rather than retyped.
-      showToast("Use an http(s) URL with {query} where the search terms go", "error");
+      showToast(t("Use an http(s) URL with {query} where the search terms go"), "error");
       return;
     }
     setCustomUrl(null);
@@ -162,20 +163,20 @@ export default function LandingPageTab(props: Props) {
     void save({ web_search: v });
   };
   const copy = (text: string) =>
-    navigator.clipboard.writeText(text).then(() => showToast("Copied", "success"), () => {});
+    navigator.clipboard.writeText(text).then(() => showToast(t("Copied"), "success"), () => {});
 
   return (
     <div style={{ display: "flex", "flex-direction": "column", gap: "20px", "max-width": "960px" }}>
       <div style={{ display: "flex", "align-items": "center", gap: "16px", "flex-wrap": "wrap" }}>
         <div style={{ flex: "1", "min-width": "260px" }}>
-          <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>A page that lists every routed service</div>
+          <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>{t("A page that lists every routed service")}</div>
           <div style={{ ...muted, "margin-top": "4px", "font-size": "13px", "line-height": "1.5" }}>
-            Each service as a card, with whether it runs, at the gateway's domain.{" "}
+            {t("Each service as a card, with whether it runs, at the gateway's domain.")}{" "}
             <HelpLink path="/docs/gateway/#the-landing-page" />
           </div>
         </div>
         <Show when={landing()?.url}>
-          {(url) => <button class="btn btn-primary" onClick={() => openUrl(url())}>Open {url().replace("https://", "")}</button>}
+          {(url) => <button class="btn btn-primary" onClick={() => openUrl(url())}>{t("Open")} {url().replace("https://", "")}</button>}
         </Show>
       </div>
 
@@ -184,10 +185,10 @@ export default function LandingPageTab(props: Props) {
           <div class="card" style={{ padding: "4px 16px" }}>
             <div class="settings-row">
               <div class="settings-row-left">
-                <span class="settings-label">Title</span>
-                <span class="settings-description">Shown at the top and in the browser tab</span>
+                <span class="settings-label">{t("Title")}</span>
+                <span class="settings-description">{t("Shown at the top and in the browser tab")}</span>
               </div>
-              <input id="landing-title" class="form-input" style={{ width: "280px" }} placeholder="Orca Gateway"
+              <input id="landing-title" class="form-input" style={{ width: "280px" }} placeholder={t("Orca Gateway")}
                 value={title() ?? s().title ?? ""} onInput={(e) => setTitle(e.currentTarget.value)}
                 onBlur={() => { if (title() !== null && title() !== (s().title ?? "")) void save({ title: title() || null }); setTitle(null); }}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} disabled={saving()} />
@@ -195,20 +196,20 @@ export default function LandingPageTab(props: Props) {
             <div class="settings-divider" />
             <div class="settings-row">
               <div class="settings-row-left">
-                <span class="settings-label">Subtitle</span>
-                <span class="settings-description">The line under the title; the domain when empty</span>
+                <span class="settings-label">{t("Subtitle")}</span>
+                <span class="settings-description">{t("The line under the title; the domain when empty")}</span>
               </div>
-              <input id="landing-subtitle" class="form-input" style={{ width: "280px" }} placeholder="*.localhost"
+              <input id="landing-subtitle" class="form-input" style={{ width: "280px" }} placeholder={t("*.localhost")}
                 value={subtitle() ?? s().subtitle ?? ""} onInput={(e) => setSubtitle(e.currentTarget.value)}
                 onBlur={() => { if (subtitle() !== null && subtitle() !== (s().subtitle ?? "")) void save({ subtitle: subtitle() || null }); setSubtitle(null); }}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} disabled={saving()} />
             </div>
             <div class="settings-divider" />
-            <Toggle on={s().show_status} onChange={(on) => void save({ show_status: on })} label="Show status and uptime"
-              hint="Running, starting, unhealthy, sleeping or stopped, and how long it has been up" />
+            <Toggle on={s().show_status} onChange={(on) => void save({ show_status: on })} label={t("Show status and uptime")}
+              hint={t("Running, starting, unhealthy, sleeping or stopped, and how long it has been up")} />
             <div class="settings-divider" />
-            <Toggle on={s().show_targets} onChange={(on) => void save({ show_targets: on })} label="Show container and port"
-              hint="The container and port behind each card, handy when debugging" />
+            <Toggle on={s().show_targets} onChange={(on) => void save({ show_targets: on })} label={t("Show container and port")}
+              hint={t("The container and port behind each card, handy when debugging")} />
           </div>
         )}
       </Show>
@@ -218,12 +219,11 @@ export default function LandingPageTab(props: Props) {
           <div class="card landing-search-card">
             <div class="landing-search-head">
               <div>
-                <div class="landing-search-title">Search box</div>
+                <div class="landing-search-title">{t("Search box")}</div>
                 <div class="landing-search-sub">
-                  Find a service and press Enter to open it; anything else searches the web. <kbd>/</kbd> jumps to it.
-                </div>
+                  {t("Find a service and press Enter to open it; anything else searches the web.")} <kbd>/</kbd> {t("jumps to it.")}</div>
               </div>
-              <div class="settings-toggle" role="switch" aria-checked={s().search} tabIndex={0} aria-label="Search box"
+              <div class="settings-toggle" role="switch" aria-checked={s().search} tabIndex={0} aria-label={t("Search box")}
                 onClick={() => void save({ search: !s().search })}
                 onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); void save({ search: !s().search }); } }}>
                 <div class={`toggle-track${s().search ? " toggle-on" : ""}`}><div class="toggle-thumb" /></div>
@@ -233,8 +233,8 @@ export default function LandingPageTab(props: Props) {
               <div class="settings-divider" />
               <div class="settings-row">
                 <div class="settings-row-left">
-                  <span class="settings-label">Search the web</span>
-                  <span class="settings-description">When no service matches, Enter searches here. Shift+Enter always does.</span>
+                  <span class="settings-label">{t("Search the web")}</span>
+                  <span class="settings-description">{t("When no service matches, Enter searches here. Shift+Enter always does.")}</span>
                 </div>
                 <Dropdown
                   value={engineChoice(s())}
@@ -249,14 +249,13 @@ export default function LandingPageTab(props: Props) {
               </div>
               <Show when={engineChoice(s()) === "custom"}>
                 <div class="landing-search-custom">
-                  <input class="form-input mono" placeholder="https://intranet.example.com/search?q={query}"
+                  <input class="form-input mono" placeholder={t("https://intranet.example.com/search?q={query}")}
                     value={customUrl() ?? (isEngine(s().web_search) ? "" : s().web_search ?? "")}
                     onInput={(e) => setCustomUrl(e.currentTarget.value)}
                     onBlur={() => saveCustom(s())}
                     onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} disabled={saving()} />
                   <span class="landing-search-hint">
-                    <span class="mono">{"{query}"}</span> is replaced by what was typed: your company wiki, Jira, GitHub code search, anything with a search URL.
-                  </span>
+                    <span class="mono">{"{query}"}</span> {t("is replaced by what was typed: your company wiki, Jira, GitHub code search, anything with a search URL.")}</span>
                 </div>
               </Show>
             </Show>
@@ -265,13 +264,11 @@ export default function LandingPageTab(props: Props) {
                 <div class="landing-start">
                   <div class="landing-start-icon">★</div>
                   <div class="landing-start-text">
-                    <b>Make it your browser's start page</b>
+                    <b>{t("Make it your browser's start page")}</b>
                     <span>
-                      Set <span class="mono">{url()}</span> as your browser's home page (and in Safari, for new tabs too). It opens with
-                      the cursor in the search box, so you can type a service or a search right away.
-                    </span>
+                      {t("Set")} <span class="mono">{url()}</span> {t("as your browser's home page (and in Safari, for new tabs too). It opens with the cursor in the search box, so you can type a service or a search right away.")}</span>
                   </div>
-                  <button class="btn btn-sm" onClick={() => void copy(url())}>Copy address</button>
+                  <button class="btn btn-sm" onClick={() => void copy(url())}>{t("Copy address")}</button>
                 </div>
               )}
             </Show>
@@ -285,13 +282,13 @@ export default function LandingPageTab(props: Props) {
 
       <div>
         <div style={{ display: "flex", "align-items": "baseline", gap: "12px", "margin-bottom": "10px", "flex-wrap": "wrap" }}>
-          <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>On the page</h3>
+          <h3 style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>{t("On the page")}</h3>
           <span style={muted}>
-            Routes from labels or orca.yaml are titled there.{" "}
-            <HelpLink path="/docs/gateway/#the-landing-page">How</HelpLink>
+            {t("Routes from labels or orca.yaml are titled there.")}{" "}
+            <HelpLink path="/docs/gateway/#the-landing-page">{t("How")}</HelpLink>
           </span>
         </div>
-        <Show when={groups().length > 0} fallback={<div style={muted}>No routes yet. Add one on the Routes tab and it appears here.</div>}>
+        <Show when={groups().length > 0} fallback={<div style={muted}>{t("No routes yet. Add one on the Routes tab and it appears here.")}</div>}>
           <For each={groups()}>
             {([name, routes]) => (
               <div style={{ "margin-bottom": "16px" }}>
@@ -306,18 +303,18 @@ export default function LandingPageTab(props: Props) {
                           <div style={{ flex: "1", "min-width": "0" }}>
                             <div style={{ color: "#e6edf3", "font-size": "13px", "font-weight": "600" }}>
                               {titleOf(r)}
-                              <Show when={hidden()}><span style={{ ...muted, "font-weight": "400", "margin-left": "8px" }}>Hidden from the page</span></Show>
+                              <Show when={hidden()}><span style={{ ...muted, "font-weight": "400", "margin-left": "8px" }}>{t("Hidden from the page")}</span></Show>
                             </div>
-                            <Show when={r.presentation?.description}><div style={{ color: "#a8b3bf", "font-size": "12px", "margin-top": "2px" }}>{r.presentation!.description}</div></Show>
+                            <Show when={r.presentation?.description}><div style={{ color: "#a8b3bf", "font-size": "12px", "margin-top": "2px" }}>{t(r.presentation!.description)}</div></Show>
                             <div class="mono" style={{ color: "#58a6ff", "font-size": "11.5px", "margin-top": "3px", "word-break": "break-all" }}>{r.hostname}{r.path ?? ""}</div>
                           </div>
                           <Show when={source} fallback={
                             <>
                               <button class="btn btn-sm" onClick={() => void setHidden(r, !hidden())}>{hidden() ? "Show" : "Hide"}</button>
-                              <button class="btn btn-sm" onClick={() => props.onEditRoute(r)}>Edit</button>
+                              <button class="btn btn-sm" onClick={() => props.onEditRoute(r)}>{t("Edit")}</button>
                             </>
                           }>
-                            <span style={{ ...muted, "max-width": "240px", "text-align": "right" }}>Change in {source}</span>
+                            <span style={{ ...muted, "max-width": "240px", "text-align": "right" }}>{t("Change in")} {source}</span>
                           </Show>
                         </div>
                       );
@@ -338,11 +335,11 @@ function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links:
   const [title, setTitle] = createSignal("");
   const [url, setUrl] = createSignal("");
   const add = async () => {
-    const t = title().trim();
+    const tx = title().trim();
     let u = url().trim();
-    if (!t || !u) return;
+    if (!tx || !u) return;
     if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
-    if (!(await props.onSave([...props.links, { title: t, url: u }]))) return;
+    if (!(await props.onSave([...props.links, { title: tx, url: u }]))) return;
     setTitle("");
     setUrl("");
   };
@@ -355,27 +352,27 @@ function MyLinks(props: { links: LandingLink[]; saving: boolean; onSave: (links:
   };
   return (
     <div class="card" style={{ padding: "14px 16px" }}>
-      <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>My links</div>
-      <div style={{ ...muted, "margin-top": "2px" }}>Your own cards at the top of the page. Kept on this computer only.</div>
+      <div style={{ color: "#e6edf3", "font-size": "14px", "font-weight": "600" }}>{t("My links")}</div>
+      <div style={{ ...muted, "margin-top": "2px" }}>{t("Your own cards at the top of the page. Kept on this computer only.")}</div>
       <Show when={props.links.length > 0}>
         <div class="my-links">
           <For each={props.links}>
             {(l, i) => (
               <div class="my-link">
-                <b>{l.title}</b>
+                <b>{t(l.title)}</b>
                 <span class="mono" title={l.url}>{l.url.replace(/^https?:\/\//, "")}</span>
-                <button class="icon-btn" title="Move up" disabled={i() === 0 || props.saving} onClick={() => move(i(), -1)}>↑</button>
-                <button class="icon-btn" title="Move down" disabled={i() === props.links.length - 1 || props.saving} onClick={() => move(i(), 1)}>↓</button>
-                <button class="icon-btn" title="Remove" disabled={props.saving} onClick={() => void remove(i())}>×</button>
+                <button class="icon-btn" title={t("Move up")} disabled={i() === 0 || props.saving} onClick={() => move(i(), -1)}>↑</button>
+                <button class="icon-btn" title={t("Move down")} disabled={i() === props.links.length - 1 || props.saving} onClick={() => move(i(), 1)}>↓</button>
+                <button class="icon-btn" title={t("Remove")} disabled={props.saving} onClick={() => void remove(i())}>×</button>
               </div>
             )}
           </For>
         </div>
       </Show>
       <form class="my-link-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
-        <input class="form-input" placeholder="Name, such as Jira board" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
-        <input class="form-input mono" placeholder="https://…" value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
-        <button class="btn" type="submit" disabled={props.saving || !title().trim() || !url().trim()}>Add link</button>
+        <input class="form-input" placeholder={t("Name, such as Jira board")} value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
+        <input class="form-input mono" placeholder={t("https://…")} value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
+        <button class="btn" type="submit" disabled={props.saving || !title().trim() || !url().trim()}>{t("Add link")}</button>
       </form>
     </div>
   );

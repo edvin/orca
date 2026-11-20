@@ -10,6 +10,7 @@ import { isAnonymous, shortContainer, volumeStack, volumeTitle, volumeUsers } fr
 import { logError } from "../lib/activityStore";
 import Spinner from "../components/Spinner";
 import HelpLink from "../components/HelpLink";
+import { t } from "../lib/i18n";
 
 interface VolumesPageProps {
   onNavigate?: (target: string) => void;
@@ -55,15 +56,15 @@ export default function VolumesPage(props: VolumesPageProps) {
 
   const removeVolume = async (name: string, e: MouseEvent) => {
     e.stopPropagation();
-    if (!await confirmDanger("Remove volume", `Remove volume "${name}"? This will permanently delete the volume data.`)) return;
+    if (!await confirmDanger(t("Remove volume"), `Remove volume "${name}"? This will permanently delete the volume data.`)) return;
     setDeletingName(name);
     try {
       await invoke("remove_volume", { name });
-      showToast(`Volume "${name}" removed`, "success");
+      showToast(t("Volume \"{name}\" removed", { name: name }), "success");
       await refresh();
     } catch (err) {
       logError(`Failed to remove volume: ${err}`, `Volume "${name}"`);
-      showToast(`Failed to remove volume: ${err}`, "error");
+      showToast(t("Failed to remove volume: {err}", { err: err }), "error");
     } finally {
       setDeletingName(null);
     }
@@ -77,12 +78,12 @@ export default function VolumesPage(props: VolumesPageProps) {
     try {
       const labelLines = createLabels().split("\n").map(l => l.trim()).filter(l => l.includes("="));
       await invoke("create_volume", { name, driver: createDriver().trim() || null, labels: labelLines.length > 0 ? labelLines : null });
-      showToast(`Volume "${name}" created`, "success");
+      showToast(t("Volume \"{name}\" created", { name: name }), "success");
       setCreateName(""); setCreateDriver("local"); setCreateLabels(""); setShowCreate(false);
       await refresh();
     } catch (err) {
       logError(`Failed to create volume: ${err}`, `Volume "${name}"`);
-      showToast(`Failed to create volume: ${err}`, "error");
+      showToast(t("Failed to create volume: {err}", { err: err }), "error");
     }
     setCreating(false);
   };
@@ -102,7 +103,7 @@ export default function VolumesPage(props: VolumesPageProps) {
     const q = query().trim().toLowerCase();
     if (!q) return true;
     return [v.name, volumeTitle(v), volumeStack(v) ?? "", ...usersOf(v.name).flatMap((u) => [u.container.name, u.destination, u.container.image])]
-      .some((t) => t.toLowerCase().includes(q));
+      .some((tx) => tx.toLowerCase().includes(q));
   };
   // In use first, by stack; then unused, biggest first.
   const shown = () =>
@@ -121,16 +122,15 @@ export default function VolumesPage(props: VolumesPageProps) {
     <div>
       <div class="page-header">
         <div>
-          <h1 class="page-title">Volumes</h1>
-          <div class="page-subtitle">Data that outlives its container: databases, uploads, caches. <HelpLink path="/docs/containers/#volumes" /></div>
+          <h1 class="page-title">{t("Volumes")}</h1>
+          <div class="page-subtitle">{t("Data that outlives its container: databases, uploads, caches.")} <HelpLink path="/docs/containers/#volumes" /></div>
         </div>
         <div class="page-actions">
-          <button class="btn" title="Refresh, and measure the sizes again" aria-label="Refresh" onClick={() => refresh(true)}>
+          <button class="btn" title={t("Refresh, and measure the sizes again")} aria-label={t("Refresh")} onClick={() => refresh(true)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style={{ "vertical-align": "-2px" }}><path d="M20 12a8 8 0 1 1-3-6.2M20 4v5h-5"/></svg>
           </button>
           <button class="btn btn-primary btn-iconed" onClick={() => setShowCreate(true)}>
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create volume
-          </button>
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>{t("Create volume")}</button>
         </div>
       </div>
 
@@ -140,37 +140,36 @@ export default function VolumesPage(props: VolumesPageProps) {
         }>
           <div class="empty">
             <div class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
-            <p class="empty-title">No volumes yet</p>
-            <p>Volumes keep a container's data across restarts and recreates; compose projects create their own. <HelpLink path="/docs/containers/#volumes" /></p>
+            <p class="empty-title">{t("No volumes yet")}</p>
+            <p>{t("Volumes keep a container's data across restarts and recreates; compose projects create their own.")} <HelpLink path="/docs/containers/#volumes" /></p>
             <div class="empty-actions">
               <button class="btn btn-primary" onClick={() => setShowCreate(true)}>
-                Create volume
-              </button>
+                {t("Create volume")}</button>
             </div>
           </div>
         </Show>
       }>
         <div class="nl-summary">
-          <div><span class="nl-k">Volumes</span><b>{volumes().length}</b></div>
-          <div><span class="nl-k">In use</span><b>{volumes().length - unused().length}</b></div>
-          <div><span class="nl-k">Unused</span><b class={unused().length ? "vl-warn" : ""}>{unused().length}</b>
+          <div><span class="nl-k">{t("Volumes")}</span><b>{volumes().length}</b></div>
+          <div><span class="nl-k">{t("In use")}</span><b>{volumes().length - unused().length}</b></div>
+          <div><span class="nl-k">{t("Unused")}</span><b class={unused().length ? "vl-warn" : ""}>{unused().length}</b>
             <Show when={haveSizes() && unused().length}><span class="vl-sub">{formatBytes(sumSizes(unused()))}</span></Show>
           </div>
-          <div><span class="nl-k">Total size</span><b>{haveSizes() ? formatBytes(sumSizes(volumes())) : "–"}</b></div>
+          <div><span class="nl-k">{t("Total size")}</span><b>{haveSizes() ? formatBytes(sumSizes(volumes())) : "–"}</b></div>
         </div>
 
         <div class="vl-toolbar">
           <div class="segmented" role="tablist">
-            <button class={filter() === "all" ? "active" : ""} onClick={() => setFilter("all")}>All</button>
-            <button class={filter() === "used" ? "active" : ""} onClick={() => setFilter("used")}>In use</button>
-            <button class={filter() === "unused" ? "active" : ""} onClick={() => setFilter("unused")}>Unused</button>
+            <button class={filter() === "all" ? "active" : ""} onClick={() => setFilter("all")}>{t("All")}</button>
+            <button class={filter() === "used" ? "active" : ""} onClick={() => setFilter("used")}>{t("In use")}</button>
+            <button class={filter() === "unused" ? "active" : ""} onClick={() => setFilter("unused")}>{t("Unused")}</button>
           </div>
-          <input class="form-input vl-search" type="search" placeholder="Find a volume, container or path"
+          <input class="form-input vl-search" type="search" placeholder={t("Find a volume, container or path")}
             value={query()} onInput={(e) => setQuery(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }} />
         </div>
 
-        <Show when={shown().length > 0} fallback={<div class="nl-hint" style={{ padding: "24px 4px" }}>No volumes match.</div>}>
+        <Show when={shown().length > 0} fallback={<div class="nl-hint" style={{ padding: "24px 4px" }}>{t("No volumes match.")}</div>}>
           <div class="nl">
             <For each={shown()}>
               {(v) => {
@@ -190,10 +189,10 @@ export default function VolumesPage(props: VolumesPageProps) {
                           {volumeTitle(v)}
                           <Show when={stack()}><span class="nl-tag nl-tag-compose">{stack()}</span></Show>
                           <Show when={isAnonymous(v.name)}><span class="nl-tag mono">{v.name.slice(0, 12)}</span></Show>
-                          <Show when={!used()}><span class="nl-tag vl-tag-unused">Unused</span></Show>
+                          <Show when={!used()}><span class="nl-tag vl-tag-unused">{t("Unused")}</span></Show>
                         </div>
                         <div class="nl-meta">
-                          <Show when={used()} fallback={<span>Not mounted by any container{v.driver !== "local" ? ` · ${v.driver}` : ""}</span>}>
+                          <Show when={used()} fallback={<span>{t("Not mounted by any container")}{v.driver !== "local" ? ` · ${v.driver}` : ""}</span>}>
                             <For each={us().slice(0, 2)}>
                               {(u, i) => (
                                 <span>
@@ -203,11 +202,11 @@ export default function VolumesPage(props: VolumesPageProps) {
                                   <button class="vl-ctr" onClick={(e) => { e.stopPropagation(); props.onNavigate?.(`container:${u.container.id}`); }}>
                                     {shortContainer(u.container.name, stack())}
                                   </button>
-                                  <Show when={!u.rw}><span class="vl-ro"> read-only</span></Show>
+                                  <Show when={!u.rw}><span class="vl-ro"> {t("read-only")}</span></Show>
                                 </span>
                               )}
                             </For>
-                            <Show when={us().length > 2}><span> · +{us().length - 2} more</span></Show>
+                            <Show when={us().length > 2}><span> · +{us().length - 2} {t("more")}</span></Show>
                           </Show>
                         </div>
                       </div>
@@ -218,7 +217,7 @@ export default function VolumesPage(props: VolumesPageProps) {
                       <span class="nl-actions">
                         <Show when={!used()}>
                           <Show when={deletingName() === v.name} fallback={
-                            <button class="action-icon action-icon-delete" title="Remove volume" disabled={deletingName() !== null} onClick={(e) => removeVolume(v.name, e)}>
+                            <button class="action-icon action-icon-delete" title={t("Remove volume")} disabled={deletingName() !== null} onClick={(e) => removeVolume(v.name, e)}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                             </button>
                           }>
@@ -243,8 +242,8 @@ export default function VolumesPage(props: VolumesPageProps) {
               <div class="modal-head-main">
                 <span class="modal-icon"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>
                 <div>
-                  <h2 class="modal-title">Create volume</h2>
-                  <div class="modal-subtitle">Mount it in a container to keep that container's data.</div>
+                  <h2 class="modal-title">{t("Create volume")}</h2>
+                  <div class="modal-subtitle">{t("Mount it in a container to keep that container's data.")}</div>
                 </div>
               </div>
               <button class="modal-close" onClick={() => setShowCreate(false)}>{"\u00d7"}</button>
@@ -253,22 +252,22 @@ export default function VolumesPage(props: VolumesPageProps) {
               <div class="modal-body">
                 <div class="form-row">
                   <div class="form-group" style={{ flex: 2 }}>
-                    <label class="form-label">Name</label>
-                    <input class="form-input mono" type="text" placeholder="my-volume" value={createName()} onInput={(e) => setCreateName(e.currentTarget.value)} autofocus />
+                    <label class="form-label">{t("Name")}</label>
+                    <input class="form-input mono" type="text" placeholder={t("my-volume")} value={createName()} onInput={(e) => setCreateName(e.currentTarget.value)} autofocus />
                   </div>
                   <div class="form-group" style={{ flex: 1 }}>
-                    <label class="form-label">Driver <span class="form-label-note">usually local</span></label>
-                    <input class="form-input mono" type="text" placeholder="local" value={createDriver()} onInput={(e) => setCreateDriver(e.currentTarget.value)} />
+                    <label class="form-label">{t("Driver")} <span class="form-label-note">{t("usually local")}</span></label>
+                    <input class="form-input mono" type="text" placeholder={t("local")} value={createDriver()} onInput={(e) => setCreateDriver(e.currentTarget.value)} />
                   </div>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Labels <span class="form-label-note">optional</span></label>
+                  <label class="form-label">{t("Labels")} <span class="form-label-note">{t("optional")}</span></label>
                   <textarea class="form-textarea mono" placeholder={"key=value\nenvironment=production"} value={createLabels()} onInput={(e) => setCreateLabels(e.currentTarget.value)} rows={2} />
-                  <span class="form-hint">key=value, one per line</span>
+                  <span class="form-hint">{t("key=value, one per line")}</span>
                 </div>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn" onClick={() => setShowCreate(false)} disabled={creating()}>Cancel</button>
+                <button type="button" class="btn" onClick={() => setShowCreate(false)} disabled={creating()}>{t("Cancel")}</button>
                 <button type="submit" class="btn btn-primary" disabled={creating() || !createName().trim()}>
                   {creating() ? "Creating..." : "Create"}
                 </button>

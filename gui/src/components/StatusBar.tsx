@@ -7,6 +7,7 @@ import { confirm } from "./ConfirmDialog";
 import { getOllamaSetupState, getOllamaSetupStatus, isOllamaSetupRunning } from "../lib/ollamaSetup";
 import { useHealth } from "../lib/healthStore";
 import { onOrcaEvent } from "../lib/events";
+import { t } from "../lib/i18n";
 
 interface StatusBarProps {
   onNavigate?: (page: string) => void;
@@ -64,7 +65,7 @@ export default function StatusBar(props: StatusBarProps) {
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
       if (update) {
-        showToast("Downloading update...", "info");
+        showToast(t("Downloading update..."), "info");
         // Stop the daemon before installing so the installer can replace the binary
         try { await invoke("stop_daemon"); } catch { /* ignore */ }
         await update.downloadAndInstall();
@@ -72,7 +73,7 @@ export default function StatusBar(props: StatusBarProps) {
         await relaunch();
       }
     } catch (e) {
-      showToast(`Update failed: ${e}`, "error");
+      showToast(t("Update failed: {e}", { e: e }), "error");
       setInstalling(false);
     }
   };
@@ -82,7 +83,7 @@ export default function StatusBar(props: StatusBarProps) {
     // Check for updates after 5 seconds, then every hour. The initial
     // setTimeout handle must be captured so we can cancel it if the
     // component unmounts before the 5s elapses.
-    const t = setTimeout(checkUpdate, 5000);
+    const tx = setTimeout(checkUpdate, 5000);
     const updateInterval = setInterval(checkUpdate, 3600000);
     getVersion().then((v) => { if (!disposed) setAppVersion(v); }).catch(() => {});
     // The active host only changes through a host switch.
@@ -107,7 +108,7 @@ export default function StatusBar(props: StatusBarProps) {
     onCleanup(() => {
       offFromAi();
       disposed = true;
-      clearTimeout(t);
+      clearTimeout(tx);
       clearInterval(updateInterval);
       document.removeEventListener("orca-host-switch", pollActiveHost);
     });
@@ -145,33 +146,29 @@ export default function StatusBar(props: StatusBarProps) {
         <Show when={health()?.docker_connected}>
           <span class="status-bar-item">
             <span class="status-bar-dot" style={{ background: "#3fb950" }} />
-            Docker
-          </span>
+            {t("Docker")}</span>
         </Show>
         <Show when={health()?.docker_connected === false}>
           <span class="status-bar-item">
             <span class="status-bar-dot" style={{ background: "#f85149" }} />
-            Disconnected
-          </span>
+            {t("Disconnected")}</span>
         </Show>
 
         <Show when={health()?.system_resources}>
           <span class="status-bar-separator" />
           <span class="status-bar-item" title={`CPU: ${health()!.system_resources!.cpu_count} cores`}>
-            CPU {health()!.system_resources!.cpu_count}
+            {t("CPU")} {health()!.system_resources!.cpu_count}
           </span>
           <span class="status-bar-separator" />
           <span class="status-bar-item" title={`Memory: ${memPercent().toFixed(0)}% used`}>
-            RAM
-            <span class="status-bar-mini-bar">
+            {t("RAM")}<span class="status-bar-mini-bar">
               <span class="status-bar-mini-fill" style={{ width: `${memPercent()}%`, background: barColor(memPercent()) }} />
             </span>
             {memPercent().toFixed(0)}%
           </span>
           <span class="status-bar-separator" />
           <span class="status-bar-item" title={`Disk: ${diskPercent().toFixed(0)}% used`}>
-            Disk
-            <span class="status-bar-mini-bar">
+            {t("Disk")}<span class="status-bar-mini-bar">
               <span class="status-bar-mini-fill" style={{ width: `${diskPercent()}%`, background: barColor(diskPercent()) }} />
             </span>
             {diskPercent().toFixed(0)}%
@@ -181,12 +178,10 @@ export default function StatusBar(props: StatusBarProps) {
         <Show when={health()?.gpu}>
           <span class="status-bar-separator" />
           <span class="status-bar-item" title={`GPU: ${health()!.gpu!.name}`}>
-            GPU
-            <span class="status-bar-mini-bar">
+            {t("GPU")}<span class="status-bar-mini-bar">
               <span class="status-bar-mini-fill" style={{ width: `${Math.round(health()!.gpu!.memory_used_mb / health()!.gpu!.memory_total_mb * 100)}%`, background: barColor(Math.round(health()!.gpu!.memory_used_mb / health()!.gpu!.memory_total_mb * 100)) }} />
             </span>
-            {(health()!.gpu!.memory_used_mb / 1024).toFixed(1)}G
-          </span>
+            {(health()!.gpu!.memory_used_mb / 1024).toFixed(1)}{t("G")}</span>
         </Show>
 
         <Show when={health()?.warnings && health()!.warnings.length > 0}>
@@ -195,7 +190,7 @@ export default function StatusBar(props: StatusBarProps) {
             class="status-bar-item status-bar-warning status-bar-clickable"
             onClick={() => props.onNavigate?.("environment")}
           >
-            ⚠ {health()!.warnings.length} warning{health()!.warnings.length > 1 ? "s" : ""}
+            ⚠ {health()!.warnings.length} {t("warning")}{health()!.warnings.length > 1 ? "s" : ""}
           </span>
         </Show>
 
@@ -236,7 +231,7 @@ export default function StatusBar(props: StatusBarProps) {
           </button>
         </Show>
         <Show when={appVersion()}>
-          <span class="status-bar-item" style={{ opacity: 0.5 }}>v{appVersion()}</span>
+          <span class="status-bar-item" style={{ opacity: 0.5 }}>{t("v")}{appVersion()}</span>
         </Show>
       </div>
     </div>
