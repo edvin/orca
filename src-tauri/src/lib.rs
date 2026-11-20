@@ -27,6 +27,7 @@
 
 mod commands;
 mod daemon;
+mod menu_i18n;
 mod tray;
 
 use std::sync::Arc;
@@ -44,6 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(daemon_manager)
         .invoke_handler(tauri::generate_handler![
+            commands::set_menu_locale,
             commands::get_status,
             commands::list_containers,
             commands::inspect_container,

@@ -5316,3 +5316,24 @@ pub(crate) async fn running_instances_for_tray() -> Vec<(String, Vec<String>)> {
     }
     out
 }
+
+/// Push the GUI's active locale to the native side so the tray menu can follow it.
+///
+/// The webview owns the language setting in `localStorage` (`orca.locale`), which
+/// Rust cannot read. Rather than duplicating the preference, the GUI reports every
+/// change here and `menu_i18n` persists it beside the Orca config. Only known
+/// locales are accepted: an arbitrary string would be written to disk and echoed
+/// back into the menu.
+#[tauri::command]
+pub async fn set_menu_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
+    // Validation lives in `menu_i18n` so adding a language needs one edit, not a
+    // second list of accepted codes here that could drift out of sync.
+    if !crate::menu_i18n::is_supported(&locale) {
+        return Err(format!("unsupported locale: {locale}"));
+    }
+    crate::menu_i18n::set_locale(&locale);
+
+    // Rebuild the tray menu so the change is visible without a restart.
+    crate::tray::rebuild_menu(&app);
+    Ok(())
+}

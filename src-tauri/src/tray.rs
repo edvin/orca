@@ -15,7 +15,7 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
         items.push(Box::new(MenuItem::with_id(
             app,
             "instances-title",
-            "Running instances",
+            &crate::menu_i18n::tr("Running instances"),
             false,
             None::<&str>,
         )?));
@@ -32,7 +32,15 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
             }
             let entries: Vec<MenuItem<tauri::Wry>> = urls
                 .iter()
-                .map(|u| MenuItem::with_id(app, format!("open:{u}"), format!("Open {u}"), true, None::<&str>))
+                .map(|u| {
+                    MenuItem::with_id(
+                        app,
+                        format!("open:{u}"),
+                        crate::menu_i18n::tr_with("Open {url}", "url", u),
+                        true,
+                        None::<&str>,
+                    )
+                })
                 .collect::<tauri::Result<_>>()?;
             let refs: Vec<&dyn IsMenuItem<tauri::Wry>> =
                 entries.iter().map(|e| e as &dyn IsMenuItem<tauri::Wry>).collect();
@@ -43,14 +51,14 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
     items.push(Box::new(MenuItem::with_id(
         app,
         "show",
-        "Show Orca",
+        &crate::menu_i18n::tr("Show Orca"),
         true,
         None::<&str>,
     )?));
     items.push(Box::new(MenuItem::with_id(
         app,
         "hide",
-        "Hide Window",
+        &crate::menu_i18n::tr("Hide Window"),
         true,
         None::<&str>,
     )?));
@@ -58,7 +66,7 @@ fn build_menu(app: &AppHandle, instances: &[(String, Vec<String>)]) -> tauri::Re
     items.push(Box::new(MenuItem::with_id(
         app,
         "quit",
-        "Quit Orca",
+        &crate::menu_i18n::tr("Quit Orca"),
         true,
         None::<&str>,
     )?));
@@ -83,11 +91,26 @@ fn spawn_refresh(app: AppHandle) {
     });
 }
 
+/// Rebuild the tray menu with the current locale.
+///
+/// Called after a language switch. The running-instance list is whatever the last
+/// refresh produced, so the rebuild never changes which entries exist — only how
+/// they read.
+pub fn rebuild_menu(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let now = crate::commands::running_instances_for_tray().await;
+        if let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(&app, &now)) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    });
+}
+
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = build_menu(app, &[])?;
 
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip("Orca — Container Desktop")
+        .tooltip(crate::menu_i18n::tr("Orca — Container Desktop"))
         .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-32x32.png")).expect("tray icon"))
         .icon_as_template(cfg!(target_os = "macos"))
         .menu(&menu)
