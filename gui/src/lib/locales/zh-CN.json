@@ -1,14 +1,14 @@
-/**
- * Simplified Chinese dictionary.
- * Keys are the English source strings used in `t(...)` calls; values are the
- * Chinese translations. Any key not present falls back to English.
- */
-
-export const zhCN: Record<string, string> = {
-  // ── Alerts (daemon) ────────────────────────────────────────────────────
-  // ("Dismiss" already exists further down — one entry, not two.)
+{
+  "$meta": {
+    "nativeLabel": "简体中文",
+    "label": "Chinese (Simplified)",
+    "match": [
+      "zh-cn",
+      "zh-hans",
+      "zh"
+    ]
+  },
   "Daemon alerts": "守护进程告警",
-  // ── Navigation (Sidebar / Command palette) ──────────────────────────────
   "Fleet": "舰队",
   "Dashboard": "仪表盘",
   "Containers": "容器",
@@ -24,8 +24,6 @@ export const zhCN: Record<string, string> = {
   "Settings": "设置",
   "Expand sidebar": "展开侧边栏",
   "Collapse sidebar": "折叠侧边栏",
-
-  // ── Titlebar ────────────────────────────────────────────────────────────
   "just now": "刚刚",
   "{minutes}m ago": "{minutes} 分钟前",
   "{hours}h ago": "{hours} 小时前",
@@ -56,8 +54,6 @@ export const zhCN: Record<string, string> = {
   "Maximize": "最大化",
   "Restore": "还原",
   "Close": "关闭",
-
-  // ── StatusBar ───────────────────────────────────────────────────────────
   "Update Available": "有可用更新",
   "Update to Orca Desktop v{version}?\n\nThe app will download the update and restart.{body}": "更新到 Orca Desktop v{version}？\n\n应用将下载更新并重启。{body}",
   "Update": "更新",
@@ -71,14 +67,10 @@ export const zhCN: Record<string, string> = {
   "Disk": "磁盘",
   "Installing...": "正在安装…",
   "Update available: {version}": "有可用更新：{version}",
-
-  // ── Common dialog / actions ─────────────────────────────────────────────
   "Copy error message": "复制错误信息",
   "Delete": "删除",
   "Cancel": "取消",
   "Confirm": "确认",
-
-  // ── Command palette ─────────────────────────────────────────────────────
   "Go to Dashboard": "前往仪表盘",
   "Go to Containers": "前往容器",
   "Go to Images": "前往镜像",
@@ -123,8 +115,6 @@ export const zhCN: Record<string, string> = {
   "Builds: View": "构建：查看",
   "Type a command...": "输入命令…",
   "No matching commands": "没有匹配的命令",
-
-  // ── Connection screen / banner / shortcuts ──────────────────────────────
   "Starting Orca...": "正在启动 Orca…",
   "Connecting to the Orca daemon and Docker runtime.": "正在连接 Orca 守护进程与 Docker 运行时。",
   "Orca daemon is not running": "Orca 守护进程未运行",
@@ -151,8 +141,6 @@ export const zhCN: Record<string, string> = {
   "Adjust font size": "调整字体大小",
   "General": "常规",
   "Show keyboard shortcuts": "显示键盘快捷键",
-
-  // ── App startup & events ────────────────────────────────────────────────
   "Checking environment...": "正在检查环境…",
   "Taking longer than expected...": "耗时比预期更长…",
   "Verifying Docker connection...": "正在验证 Docker 连接…",
@@ -171,8 +159,6 @@ export const zhCN: Record<string, string> = {
   "View Logs": "查看日志",
   "Container '{name}' started": "容器「{name}」已启动",
   "Image pulled: {reference}": "镜像已拉取：{reference}",
-
-  // ── Dashboard ───────────────────────────────────────────────────────────
   "Docker not reachable. Try Restart Orca on System Health page.": "无法连接 Docker。请在系统健康页面尝试重启 Orca。",
   "Waiting for Docker...": "正在等待 Docker…",
   "Welcome to Orca Desktop": "欢迎使用 Orca Desktop",
@@ -201,8 +187,6 @@ export const zhCN: Record<string, string> = {
   "CPU": "CPU",
   "Trend": "趋势",
   "Memory": "内存",
-
-  // ── Containers page ─────────────────────────────────────────────────────
   "Exposed {name} at {hostname}": "已通过 {hostname} 暴露 {name}",
   "Failed to expose: {error}": "暴露失败：{error}",
   "Route {hostname} removed": "路由 {hostname} 已移除",
@@ -297,7 +281,6 @@ export const zhCN: Record<string, string> = {
   "dead": "僵死",
   "rebuild": "重建中",
   "removing": "移除中",
-  // ── Container detail page ───────────────────────────────────────────────
   "Failed to read file: {error}": "读取文件失败：{error}",
   "Repository name is required": "请填写仓库名称",
   "Image created: {image}": "镜像已创建：{image}",
@@ -382,7 +365,6 @@ export const zhCN: Record<string, string> = {
   "URL": "URL",
   "Remove Route": "移除路由",
   "MB": "MB",
-  // ── Volumes / Networks ──────────────────────────────────────────────────
   "Remove Volume": "删除存储卷",
   "Remove volume \"{name}\"? This will permanently delete the volume data.": "删除存储卷「{name}」？这将永久删除卷内数据。",
   "Volume \"{name}\" removed": "存储卷「{name}」已删除",
@@ -427,7 +409,6 @@ export const zhCN: Record<string, string> = {
   "Default": "默认",
   "Custom": "自定义",
   "Loading topology...": "正在加载拓扑…",
-  // ── Activity / Machine / Stacks / StackDetail ──────────────────────────
   "No activity yet": "暂无活动",
   "Errors and events will appear here as they happen.": "错误和事件发生后会显示在这里。",
   "Daemon Log": "守护进程日志",
@@ -466,7 +447,6 @@ export const zhCN: Record<string, string> = {
   "No compose file path available": "Compose 文件路径不可用",
   "Compose file saved": "Compose 文件已保存",
   "Failed to save: {error}": "保存失败：{error}",
-  // ── Images page ─────────────────────────────────────────────────────────
   "Remove Image": "删除镜像",
   "Remove image '{tag}'?": "删除镜像「{tag}」？",
   "Image removed": "镜像已删除",
@@ -540,7 +520,6 @@ export const zhCN: Record<string, string> = {
   "Image Layers": "镜像层",
   "Step": "步骤",
   "Layers Dialog": "镜像层",
-  // ── Builds page ─────────────────────────────────────────────────────────
   "{seconds}s ago": "{seconds} 秒前",
   "Manual": "手动",
   "File Watch": "文件监听",
@@ -595,8 +574,6 @@ export const zhCN: Record<string, string> = {
   "Build from URL": "从 URL 构建",
   "Source URL": "来源 URL",
   "https://github.com/user/repo.git or Dockerfile URL": "https://github.com/user/repo.git 或 Dockerfile URL",
-
-  // ── Fleet page ──────────────────────────────────────────────────────────
   "Cannot remove local host": "无法移除本地主机",
   "Failed to remove {name}: {error}": "移除「{name}」失败：{error}",
   "Removed {count} hosts": "已移除 {count} 台主机",
@@ -607,7 +584,6 @@ export const zhCN: Record<string, string> = {
   "Select": "选择",
   "Version mismatch detected": "检测到版本不一致",
   "Unknown": "未知",
-  // ── Templates / App Catalog ─────────────────────────────────────────────
   "Docker Hub search failed: {error}": "Docker Hub 搜索失败：{error}",
   "Pulled {name} successfully": "{name} 拉取成功",
   "Failed to pull {name}: {error}": "拉取 {name} 失败：{error}",
@@ -676,8 +652,6 @@ export const zhCN: Record<string, string> = {
   "Curated": "精选",
   "No port mappings. Add one to expose a container port to the host (e.g., 8080:80).": "暂无端口映射。添加一条即可将容器端口暴露到主机（如 8080:80）。",
   "No environment variables. Add KEY=VALUE pairs to configure the application.": "暂无环境变量。添加 KEY=VALUE 键值对来配置应用。",
-
-  // ── Environment / System Health ────────────────────────────────────────
   "Recreate VM": "重建虚拟机",
   "Daemon restarted successfully.": "守护进程重启成功。",
   "Daemon restart failed. Close and reopen Orca Desktop.": "守护进程重启失败。请关闭并重新打开 Orca Desktop。",
@@ -708,7 +682,6 @@ export const zhCN: Record<string, string> = {
   "This may take several minutes...": "这可能需要几分钟时间…",
   "Docker Connection Issue": "Docker 连接问题",
   "Container Runtime Setup": "容器运行时设置",
-  // ── Gateway page ────────────────────────────────────────────────────────
   "Gateway started but Caddy is not responding. Check Settings > About > Daemon Log.": "网关已启动但 Caddy 未响应。请查看 设置 > 关于 > 守护进程日志。",
   "Gateway configuration saved": "网关配置已保存",
   "Ports are available": "端口可用",
@@ -786,7 +759,6 @@ export const zhCN: Record<string, string> = {
   "Edit Route": "编辑路由",
   "Route a specific path to this container": "将特定路径路由到此容器",
   "Save Changes": "保存更改",
-  // ── Kubernetes page ─────────────────────────────────────────────────────
   "Kubernetes runtime set to {value}": "Kubernetes 运行时已设置为 {value}",
   "Failed to set runtime: {error}": "设置运行时失败：{error}",
   "Port forwarded — accessible at localhost:{port}": "端口已转发——通过 localhost:{port} 访问",
@@ -1025,7 +997,6 @@ export const zhCN: Record<string, string> = {
   "Jobs": "Job",
   "CRDs": "CRD",
   "Topology": "拓扑",
-  // ── Settings page ───────────────────────────────────────────────────────
   "Language": "语言",
   "CA Certificate saved to {path}": "CA 证书已保存到 {path}",
   "Failed to download CA certificate: {error}": "下载 CA 证书失败：{error}",
@@ -1226,8 +1197,8 @@ export const zhCN: Record<string, string> = {
   "suspended": "暂停",
   "CronJob {name} deleted": "CronJob {name} 已删除",
   "Job {name} deleted": "Job {name} 已删除",
-  "{name} stack deployed{suffix}!{notes}": "{name} 堆栈已部署！",
-  "{name} deployed{suffix}!{notes}": "{name} 已部署！",
+  "{name} stack deployed{suffix}!{notes}": "{name} 堆栈已部署{suffix}！{notes}",
+  "{name} deployed{suffix}!{notes}": "{name} 已部署{suffix}！{notes}",
   "No volumes. Add one to persist data (e.g., data:/var/lib/myapp).": "暂无数据卷。添加一条即可持久化数据（如 data:/var/lib/myapp）。",
   "~2 GB RAM": "约 2 GB 内存",
   "License required": "需要付费许可",
@@ -1239,7 +1210,6 @@ export const zhCN: Record<string, string> = {
   "Set the image pattern (e.g.,": "设置镜像模式（如",
   " and tag filter (e.g.,": "）和标签过滤（如",
   " for version tags": " 表示版本标签）",
-  // ── Coverage fixes (audit) ──────────────────────────────────────────────
   "AI & Agents": "AI 与 Agent",
   "API Token": "API 令牌",
   "About": "关于",
@@ -1433,7 +1403,6 @@ export const zhCN: Record<string, string> = {
   "API token is required": "请填写 API 令牌",
   "Container": "容器",
   "Domain": "域名",
-  // ── Second-pass fixes (audit round 2) ───────────────────────────────────
   "Edit \"{name}\"": "编辑「{name}」",
   "Stack \"{name}\" deployed!": "堆栈「{name}」已部署！",
   "Stack \"{name}\" saved": "堆栈「{name}」已保存",
@@ -1458,7 +1427,6 @@ export const zhCN: Record<string, string> = {
   "e.g. bitnami/nginx, ingress-nginx/ingress-nginx": "如 bitnami/nginx、ingress-nginx/ingress-nginx",
   "in a project directory to see it here": "在项目目录中运行，堆栈会显示在这里",
   "key=value, one per line": "key=value，每行一条",
-  // ── Third-pass (final sweep) ────────────────────────────────────────────
   "Orca CA (automatic)": "Orca CA（自动）",
   "Custom Certificate": "自定义证书",
   "Go to Certificates": "前往证书设置",
@@ -1467,8 +1435,6 @@ export const zhCN: Record<string, string> = {
   "Security Policy": "安全策略",
   "e.g. local-path (k3s default)": "如 local-path（k3s 默认）",
   "Connection info, setup tips...": "连接信息、安装提示…",
-
-  // ── Third-pass additions ─────────────────────────────────────────────
   "* = any tag, v* = version tags (v1.0, v2.3.1), latest = only latest, main = branch": "* = 任意标签，v* = 版本标签（v1.0、v2.3.1），latest = 仅最新，main = 分支",
   "API Key": "API 密钥",
   "Add this to your Claude Code or Claude Desktop MCP configuration.": "将以下内容添加到你的 Claude Code 或 Claude Desktop MCP 配置中。",
@@ -1600,7 +1566,6 @@ export const zhCN: Record<string, string> = {
   "View Layers": "查看镜像层",
   "View Volume": "查看存储卷",
   "Your containers and images will still be available.": "你的容器和镜像仍然保留。",
-
   "Environment links are configured in your project's": "环境链接在项目根目录的",
   "Map a hostname to a container's internal port. The Gateway serves it over HTTPS on ports": "将主机名映射到容器内部端口。网关通过以下端口提供 HTTPS 访问：",
   "Orca generates a local Certificate Authority to sign TLS certificates for the Gateway. Install the CA certificate to trust HTTPS connections.": "Orca 会生成本地证书机构（CA）为网关签发 TLS 证书。安装 CA 证书即可信任 HTTPS 连接。",
@@ -1608,10 +1573,7 @@ export const zhCN: Record<string, string> = {
   "Reset Cluster": "重置集群",
   "Traefik Info": "Traefik 信息",
   "orca.yaml in your repo auto-registers routes": "仓库中的 orca.yaml 会自动注册路由",
-
   "(stack)": "（堆栈）",
-
-  // ── App Catalog categories (dynamic t(cat) keys) ────────────────────────
   "Database": "数据库",
   "Web Server": "Web 服务器",
   "Monitoring": "监控",
@@ -1625,27 +1587,19 @@ export const zhCN: Record<string, string> = {
   "Save your API key first — available models will load as a dropdown": "请先保存 API 密钥——可用模型会以下拉列表加载",
   "Orca generates a local CA to sign TLS certificates for deployed app templates.": "Orca 会生成本地 CA，为已部署的应用模板签发 TLS 证书。",
   "Install the CA certificate to trust all Orca-deployed services.": "安装该 CA 证书即可信任所有 Orca 部署的服务。",
-
-  // ── Builds analytics + Networks + health warnings ────────────────────────
   "Builds per Day (Last 7 Days)": "每日构建数（近 7 天）",
   "Most Built Images": "构建最多的镜像",
   "Disk usage is above 90% — consider pruning images": "磁盘使用率已超过 90%——建议清理无用镜像",
   "Less than 512MB memory available": "可用内存不足 512 MB",
   "{runtime} is not running or not reachable": "{runtime} 未运行或无法连接",
   "{gb}GB of Docker storage is reclaimable — consider pruning": "有 {gb} GB Docker 存储空间可回收——建议清理",
-
-  // ── Dynamic-key entries (previously missed by audits) ───────────────────
   "{count} lines": "{count} 行",
   "{count} matches": "{count} 处匹配",
   "{count} new lines — click to resume": "{count} 行新日志——点击恢复自动滚动",
   "{count} lines from {total} containers": "来自 {total} 个容器的 {count} 行日志",
   "Docker Hub": "Docker Hub",
-
-  // ── Deploy failure reporting ────────────────────────────────────────────
   "Deploy failed (exit {code}): {error}": "部署失败（退出码 {code}）：{error}",
   "Compose exited with {code}: {error}": "Compose 退出码 {code}：{error}",
-
-  // ── Registry mirrors ────────────────────────────────────────────────────
   "Restart required": "需重启生效",
   "Active in the running engine: {list}": "当前引擎生效中：{list}",
   "Restart Docker": "重启 Docker",
@@ -1653,9 +1607,6 @@ export const zhCN: Record<string, string> = {
   "Failed to restart Docker: {error}": "重启 Docker 失败：{error}",
   "Docker is restarting. This can take up to a minute.": "Docker 正在重启，最多可能需要一分钟。",
   "Restart Docker?": "重启 Docker？",
-
-
-  // ── Docker 引擎（daemon.json）──
   "Docker Engine": "Docker 引擎",
   "These settings live in the engine configuration file and apply to every container on this machine.": "这些设置保存在引擎配置文件中，对本机所有容器生效。",
   "Configuration file": "配置文件",
@@ -1707,8 +1658,6 @@ export const zhCN: Record<string, string> = {
   "The configuration must be a JSON object.": "配置必须是一个 JSON 对象。",
   "{field} must be a whole number between {lo} and {hi}": "{field} 必须是 {lo} 到 {hi} 之间的整数",
   "Docker will restart so the engine settings take effect. Every running container stops; only containers with a restart policy come back automatically.": "Docker 将重启以使引擎设置生效。所有运行中的容器都会停止，只有配置了重启策略的容器才会自动恢复。",
-
-  // ── 私有仓库凭据（区别于上面的镜像加速）──
   "Registry Credentials": "仓库凭据",
   "Private Registry Credentials": "私有仓库凭据",
   "No credentials configured. Add a login for a private image registry such as ghcr.io. Public images need none.": "尚未配置凭据。可为私有镜像仓库（如 ghcr.io）添加登录信息；公共镜像无需凭据。",
@@ -1722,9 +1671,6 @@ export const zhCN: Record<string, string> = {
   "Failed to add credential: {error}": "添加凭据失败：{error}",
   "Failed to remove credential: {error}": "移除凭据失败：{error}",
   "Your registry credentials": "你的仓库凭据",
-
-
-  // ── 镜像使用状态（对齐 Docker Desktop 的绿点）──
   "In use": "使用中",
   "In use only": "仅使用中",
   "Show only images referenced by a container": "只显示被容器引用的镜像",
@@ -1733,9 +1679,6 @@ export const zhCN: Record<string, string> = {
   "Could not determine whether this image is in use.": "无法确定该镜像是否正在被使用。",
   "In use by {count} running container(s): {names}": "正被 {count} 个运行中的容器使用：{names}",
   "Used only by stopped container(s): {names}": "仅被已停止的容器使用：{names}",
-
-
-  // ── 补齐缺失 key + 新增 UI 文案 ──
   "Failed to load cluster status": "加载集群状态失败",
   "Failed to load images": "加载镜像列表失败",
   "100 lines": "100 行",
@@ -1751,28 +1694,16 @@ export const zhCN: Record<string, string> = {
   "(every 6h)": "（每 6 小时）",
   "(weekdays 6pm)": "（工作日 18:00）",
   "\n\nWhat's new:\n{body}": "\n\n更新内容：\n{body}",
-
-
-  // ── 存储卷使用状态 ──
   "Could not determine whether this volume is in use.": "无法确定该存储卷是否正在被使用。",
   "In use by: {names}": "正在被使用：{names}",
-
-  // ── 模板密码提示 ──
   "Passwords below are generated randomly — there is no default to change.": "下面的密码已随机生成——不存在需要修改的默认密码。",
-
-  // ── 模板部署命名 ──
   "Leave empty to auto-generate a unique name — the template's named volumes get the same suffix, so repeat deploys never share data.": "留空即自动生成唯一名称——模板自带的命名存储卷会追加同样的后缀，因此重复部署不会共用同一份数据。",
   "The template's volumes carry this deploy's suffix so two deploys never share data. A name you type yourself is used as-is.": "模板自带的存储卷已带上本次部署的后缀，两次部署不会共用数据；你自己填写的卷名则原样使用。",
-
-
-  // ── Agent 工具风险上限 ──
   "Maximum agent tool risk": "AI 工具最高风险等级",
   "Read only (recommended)": "只读（推荐）",
   "Read and write": "读写",
   "Read, write, and destructive": "读写与销毁性操作",
   "Tools the AI agent may run on its own. \"Read only\" blocks anything that changes or deletes containers, images, or stacks — an agent can be misled by text it reads, so keep this as low as you can.": "允许 AI 自行调用的工具范围。“只读”会拦截一切改动或删除容器、镜像、编排栈的操作——AI 可能被它读到的内容误导，因此在够用的前提下应尽量调低。",
-
-  // ── Ported from the v0.73.1 GUI ─────────────────────────────────────────
   "!override": "!override",
   "!reset": "!reset",
   "\" already exists": "\" 的容器已存在",
@@ -3102,4 +3033,9 @@ export const zhCN: Record<string, string> = {
   "Copy value": "复制值",
   "Copy decoded value": "复制解码后的值",
   "Copy full network ID": "复制完整网络 ID",
-};
+  "Running instances": "运行中的实例",
+  "Show Orca": "显示 Orca",
+  "Hide Window": "隐藏窗口",
+  "Quit Orca": "退出 Orca",
+  "Orca — Container Desktop": "Orca — 容器桌面"
+}

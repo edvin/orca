@@ -1,6 +1,3 @@
-import { createSignal } from "solid-js";
-import { zhCN } from "./locales/zh-CN";
-
 /**
  * Tiny reactive i18n for the Orca GUI.
  *
@@ -9,65 +6,106 @@ import { zhCN } from "./locales/zh-CN";
  * string to its translation; missing keys transparently fall back to English,
  * so partial locale files never break the UI.
  *
- * Adding a language is meant to be a one-file change: drop a dictionary module
- * in `lib/locales/` and add one entry to `AVAILABLE_LOCALES` below. Everything
- * else — the switcher, browser detection and the native menu — reads from that
- * list, so nothing else enumerates locales by name.
+ * ## Adding a language
  *
- * `DICTIONARIES` is assembled from `AVAILABLE_LOCALES` rather than written out
- * separately, so the two can never disagree about which language exists.
+ * Drop `lib/locales/<bcp47>.json` next to the others. Nothing else — this file
+ * discovers the directory at build time via `import.meta.glob`, and
+ *
+ *     src-tauri/src/menu_i18n.rs
+ *
+ * reads the same directory from `src-tauri/build.rs`, so the native tray menu
+ * picks the language up too. The file name is the locale code (`zh-CN.json` ->
+ * `zh-CN`) and must be valid BCP 47.
+ *
+ * A locale file is a flat `{ "English source": "translation" }` map plus an
+ * optional `$meta` block:
+ *
+ *     {
+ *       "$meta": {
+ *         "nativeLabel": "简体中文",
+ *         "label": "Chinese (Simplified)",
+ *         "match": ["zh-cn", "zh-hans", "zh"]
+ *       },
+ *       "Containers": "容器"
+ *     }
+ *
+ * `nativeLabel` is shown in the language switcher (so it reads in its own
+ * language), `label` is the English name for tooltips and logs, and `match`
+ * lists the browser tags detection should accept. Omitting `$meta` is legal:
+ * the code is the file name and the English name defaults to it.
  */
+import { createSignal } from "solid-js";
+
+/** Shape of a `lib/locales/*.json` file. */
+interface LocaleFile {
+  $meta?: {
+    nativeLabel?: string;
+    label?: string;
+    /** BCP 47 tags, lower-cased, that detection should map to this locale. */
+    match?: string[];
+  };
+  [source: string]: unknown;
+}
 
 /**
- * The locale codes that ship with a dictionary.
- *
- * Widening this is the one change a new language needs here; `Locale` is derived
- * from the `AVAILABLE_LOCALES` list below so that omitting an entry is a type
- * error rather than a silently unreachable language.
+ * Every `lib/locales/*.json`, keyed by path. `eager` so the dictionaries are
+ * bundled rather than fetched, and so the set is known synchronously at import.
  */
-const DICTIONARY_MODULES = {
-  "zh-CN": zhCN,
-} as const;
+const LOCALE_FILES = import.meta.glob<LocaleFile>("./locales/*.json", {
+  eager: true,
+  import: "default",
+});
 
-export type Locale = "en" | keyof typeof DICTIONARY_MODULES;
+/** `"zh-CN"` from `"./locales/zh-CN.json"`. The file name is the locale code. */
+function codeOf(globPath: string): string {
+  return globPath.slice(globPath.lastIndexOf("/") + 1, -".json".length);
+}
 
 export interface LocaleInfo {
-  code: Locale;
+  code: string;
   /** Native name shown in the language switcher */
   nativeLabel: string;
   /** English name (for tooltips / logs) */
   label: string;
 }
 
-/**
- * Each entry pairs a code with the BCP 47 tags it should answer to.
- *
- * The tags drive detection, which previously special-cased Chinese with a
- * literal `if (base === "zh")`. A language whose browser tag is a bare base
- * language (no region) declares that tag here — `zh` matches `zh-CN`, `pt`
- * matches `pt-BR` — and a regional variant only matches itself plus its base.
- */
-interface LocaleEntry extends LocaleInfo {
-  /** Tags accepted during detection, lower-cased, most specific first. */
-  match: readonly string[];
+interface ResolvedLocale extends LocaleInfo {
+  /** Lower-cased tags accepted during detection, most specific first. */
+  match: string[];
+  dictionary: Record<string, string>;
 }
 
-const LOCALES: readonly LocaleEntry[] = [
-  {
-    code: "en",
-    nativeLabel: "English",
-    label: "English",
-    match: ["en"],
-  },
-  {
-    code: "zh-CN",
-    nativeLabel: "简体中文",
-    label: "Chinese (Simplified)",
-    // `zh` so a browser reporting plain "zh" (no region) still lands on Simplified
-    // rather than falling through to English.
-    match: ["zh-cn", "zh-hans", "zh"],
-  },
+/**
+ * Locales derived from the files on disk, English first.
+ *
+ * English has no file: its "dictionary" is the source text itself, so it is
+ * always available and cannot be missing.
+ */
+const LOCALES: ResolvedLocale[] = [
+  { code: "en", nativeLabel: "English", label: "English", match: ["en"], dictionary: {} },
+  ...Object.entries(LOCALE_FILES)
+    .map(([globPath, raw]): ResolvedLocale => {
+      const code = codeOf(globPath);
+      const meta = raw.$meta ?? {};
+      const { $meta: _ignored, ...entries } = raw;
+      const dictionary: Record<string, string> = {};
+      for (const [source, value] of Object.entries(entries)) {
+        if (typeof value === "string") dictionary[source] = value;
+      }
+      return {
+        code,
+        nativeLabel: meta.nativeLabel ?? code,
+        label: meta.label ?? code,
+        // A locale with no declared tags is still reachable by its exact code.
+        match: (meta.match ?? [code.toLowerCase()]).map((t) => t.toLowerCase()),
+        dictionary,
+      };
+    })
+    // Stable order independent of directory iteration.
+    .sort((a, b) => a.code.localeCompare(b.code)),
 ];
+
+export type Locale = string;
 
 export const AVAILABLE_LOCALES: LocaleInfo[] = LOCALES.map(({ code, nativeLabel, label }) => ({
   code,
@@ -75,12 +113,17 @@ export const AVAILABLE_LOCALES: LocaleInfo[] = LOCALES.map(({ code, nativeLabel,
   label,
 }));
 
-const DICTIONARIES: Partial<Record<Locale, Record<string, string>>> = DICTIONARY_MODULES;
+const DICTIONARIES: Record<string, Record<string, string>> = Object.fromEntries(
+  LOCALES.map((l) => [l.code, l.dictionary]),
+);
 
 const STORAGE_KEY = "orca.locale";
 
+/** The fallback locale. Its "dictionary" is empty, so lookups return the key. */
+const DEFAULT_LOCALE = "en";
+
 function isLocale(value: unknown): value is Locale {
-  return AVAILABLE_LOCALES.some((l) => l.code === value);
+  return typeof value === "string" && LOCALES.some((l) => l.code === value);
 }
 
 function detectLocale(): Locale {
@@ -91,17 +134,18 @@ function detectLocale(): Locale {
   for (const lang of langs) {
     if (!lang) continue;
     const lower = lang.toLowerCase();
-    // A declared tag matches exactly, or as the region-less prefix of a
-    // regional tag (`en` accepts `en-GB`, `zh-CN` does not accept `zh-TW`).
+    const base = lower.split("-")[0];
     for (const entry of LOCALES) {
       for (const tag of entry.match) {
-        if (lower === tag || (tag.includes("-") ? false : lower.split("-")[0] === tag)) {
-          return entry.code;
-        }
+        // An exact tag matches; a regionless tag also matches its variants
+        // (`en` accepts `en-GB`) but a regional one does not (`zh-CN` rejects
+        // `zh-TW`, so a Traditional Chinese browser falls through to English
+        // rather than getting Simplified).
+        if (lower === tag || (!tag.includes("-") && base === tag)) return entry.code;
       }
     }
   }
-  return "en";
+  return DEFAULT_LOCALE;
 }
 
 const [locale, setLocaleSignal] = createSignal<Locale>(readSavedLocale());
