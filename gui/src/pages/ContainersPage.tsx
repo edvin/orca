@@ -55,6 +55,20 @@ function writePref(key: string, value: string) {
   }
 }
 
+const TOGGLED_KEY = "orca.containers.toggled";
+
+function readToggled(): Map<string, boolean> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(TOGGLED_KEY) ?? "{}");
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return new Map();
+    return new Map(
+      Object.entries(saved).filter((e): e is [string, boolean] => typeof e[1] === "boolean"),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
 export default function ContainersPage(props: ContainersPageProps) {
   // Shared lists, refreshed by Docker events (see lib/dockerStore.ts).
   const containerList = containersStore.use();
@@ -80,8 +94,10 @@ export default function ContainersPage(props: ContainersPageProps) {
   onIntent("containers", (a) => { if (a === "run") setShowRunDialog(true); });
   // Stats of all running containers, shared with the dashboard.
   const { stats: inlineStats } = useContainerStats();
-  // Stacks the user opened or closed; the rest follow `openByDefault`.
-  const [toggled, setToggled] = createSignal<Map<string, boolean>>(new Map());
+  // Stacks the user opened or closed, remembered across visits and restarts;
+  // the rest follow `openByDefault`.
+  const [toggled, setToggled] = createSignal<Map<string, boolean>>(readToggled());
+  createEffect(() => writePref(TOGGLED_KEY, JSON.stringify(Object.fromEntries(toggled()))));
   const [menuOpen, setMenuOpen] = createSignal<string | null>(null);
   const [containerMenuOpen, setContainerMenuOpen] = createSignal<string | null>(null);
   closeOnEscape(
